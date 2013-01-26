@@ -32,9 +32,10 @@ object FindRules extends ScoobiApp {
     println("rulesPath: #rulesPath; sentencesDir: #sentencesDir; outFile: #outFile")
     val trie = getRuleFinder(rulesPath)
     println("trie built")
+    val dtrie:DObject[RuleTrieC] = DObject(trie)
     val lines:DList[String] = fromTextFile(sentencesDir)
-    val foundRules:DList[MatchedSentence] = (DObject(trie) join lines) map {
-      case (t, l) => processAndFind(t, l)
+    val foundRules:DList[(String, List[Int])] = (dtrie join lines) map {
+      case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
     }
     persist(toTextFile(foundRules, outFile))
   }

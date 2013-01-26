@@ -6,7 +6,7 @@ import com.nicta.scoobi.Scoobi._
   * assumes all strings are already normalized.
   * 
   */
-case class RuleTrieC(var rulesHere:List[Int], var subs:Map[Char, RuleTrieC]) {
+case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
   def this() = {
     this(Nil, Map.empty)
   }
@@ -18,22 +18,22 @@ case class RuleTrieC(var rulesHere:List[Int], var subs:Map[Char, RuleTrieC]) {
     case c::rest => (subs get c) map (_ findRule rest.mkString) getOrElse(rulesHere)
   }
 
-  def newSub(at:Char) = {
-    val newTrie = new RuleTrieC
-    subs = subs + (at -> newTrie)
-    newTrie
+  def newSubs(at:Char, rest:List[Char], id:Int):Map[Char, RuleTrieC] = {
+    val toUpdate = subs.getOrElse(at, new RuleTrieC)
+    val updated = toUpdate.addRuleMap(rest.mkString, id)
+    subs + (at -> updated)
   }
 
-  def addRuleMap(rule:String, id:Int):Unit = rule.toList match {
-    case Nil => rulesHere = id::rulesHere
-    case c::rest => subs.getOrElse(c, newSub(c)).addRuleMap(rest.mkString, id)
+  def addRuleMap(rule:String, id:Int):RuleTrieC = rule.toList match {
+    case Nil => RuleTrieC(id::rulesHere, subs)
+    case c::rest => RuleTrieC(rulesHere, newSubs(c, rest, id))
   }
 
   def stripVar(str:String):String = """@R@""".r.replaceAllIn(str, "")
 
   /** adds both the left and right sides of a Rule, removing the var string (@R@) */
-  def addRule(rule:Rule, id:Int):Unit = {
-    (rule.lhs::rule.rhs::Nil) map (stripVar(_)) foreach (addRuleMap(_, id))
+  def addRule(rule:Rule, id:Int):RuleTrieC = {
+    addRuleMap(stripVar(rule.lhs), id).addRuleMap(stripVar(rule.rhs), id)
   }
 
   /** finds rules for every suffix of the input sentence.
