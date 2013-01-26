@@ -3,7 +3,8 @@ import com.nicta.scoobi.Scoobi._
 
 import scala.io.Source
 
-object TrCorpus extends ScoobiApp {
+@EnhanceStrings
+object FindRules extends ScoobiApp {
 
   /** builds a rule-loading trie from the rules file.
     */
@@ -20,9 +21,22 @@ object TrCorpus extends ScoobiApp {
     rtc
   }
 
+  def processAndFind(trie:RuleTrieC, line:String):MatchedSentence = {
+    MatchedSentence(line, trie.findAllRules(line.toLowerCase))
+  }
+
   def run() = {
     val rulesPath = args(0)
+    val sentencesDir = args(1)
+    val outFile = args(2)
+    println("rulesPath: #rulesPath; sentencesDir: #sentencesDir; outFile: #outFile")
     val trie = getRuleFinder(rulesPath)
+    println("trie built")
+    val lines:DList[String] = fromTextFile(sentencesDir)
+    val foundRules:DList[MatchedSentence] = (DObject(trie) join lines) map {
+      case (t, l) => processAndFind(t, l)
+    }
+    persist(toTextFile(foundRules, outFile))
   }
 }
 

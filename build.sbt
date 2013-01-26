@@ -18,7 +18,7 @@ scalaVersion := "2.9.2"
 
 resolvers += "Virtual-Void repository" at "http://mvn.virtual-void.net"
 
-//addCompilerPlugin("net.virtualvoid" % "scala-enhanced-strings_2.9.2" % "0.5.2")
+addCompilerPlugin("net.virtualvoid" % "scala-enhanced-strings_2.9.1" % "0.5.2")
 
 resolvers ++= Seq(
   "Sonatype-snapshots" at "http://oss.sonatype.org/content/repositories/snapshots",
