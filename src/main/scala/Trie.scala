@@ -1,6 +1,6 @@
 package trc1
-import scala.collection.mutable.{Map => MMap}
 import com.nicta.scoobi.Scoobi._
+import scala.collection.immutable.Map
 
 /** A character-based prefix trie that pulls up rules for prefixes
   * assumes all strings are already normalized.
@@ -32,8 +32,8 @@ case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
   def stripVar(str:String):String = """@R@""".r.replaceAllIn(str, "")
 
   /** adds both the left and right sides of a Rule, removing the var string (@R@) */
-  def addRule(rule:Rule, id:Int):RuleTrieC = {
-    addRuleMap(stripVar(rule.lhs), id).addRuleMap(stripVar(rule.rhs), id)
+  def addRule(rule:Rule):RuleTrieC = {
+    addRuleMap(stripVar(rule.lhs), rule.id).addRuleMap(stripVar(rule.rhs), rule.id)
   }
 
   /** finds rules for every suffix of the input sentence.
@@ -43,4 +43,20 @@ case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
   def findAllRules(sentence:String):List[Int] = {
     sentence.tails flatMap(findRule(_)) toList
   }
+  def updateM(m:Map[Char, RuleTrieC], pair:(Char, RuleTrieC)):Map[Char, RuleTrieC] = {
+    val rtc2 = (this.subs get pair._1) map (_ + pair._2) getOrElse (pair._2)
+    m + (pair._1 -> rtc2)
+  }
+
+  def +(rtc:RuleTrieC):RuleTrieC = {
+    val newMap = rtc.subs.foldLeft(this.subs)(updateM(_, _))
+    new RuleTrieC(this.rulesHere ++ rtc.rulesHere, newMap)
+  }
 }
+
+/*
+object RuleTrieC {
+  def apply(rule:Rule, id:Int) = {
+    (new RuleTrieC).addRule(rule, id)
+  }
+}*/

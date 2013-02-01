@@ -9,16 +9,15 @@ object FindRules extends ScoobiApp {
   /** builds a rule-loading trie from the rules file.
     */
   def getRuleFinder(rulesPath:String) = {
-    val rtc = new RuleTrieC
+    //val rtc = new RuleTrieC
     //a lambda that takes a tuple containing a rule and an int
     //and calls into the rtc's add method
-    val addRule = (rtc.addRule(_:Rule, _:Int)).tupled
+    //val addRule = (rtc.addRule(_:Rule, _:Int)).tupled
     Source.fromFile(rulesPath)
       .getLines()
-      .map(Rule.fromString(_))
-      .zipWithIndex
-      .foreach(addRule)
-    rtc
+      .map(ruleFromString(_))
+      .map((new RuleTrieC).addRule(_))
+      .reduce(_+_)
   }
 
   def processAndFind(trie:RuleTrieC, line:String):MatchedSentence = {
@@ -30,9 +29,17 @@ object FindRules extends ScoobiApp {
     val sentencesDir = args(1)
     val outFile = args(2)
     println("rulesPath: #rulesPath; sentencesDir: #sentencesDir; outFile: #outFile")
-    val trie = getRuleFinder(rulesPath)
-    println("trie built")
-    val dtrie:DObject[RuleTrieC] = DObject(trie)
+    //val trie = getRuleFinder(rulesPath)
+    //println(trie)
+    
+    val rules:DList[String] = fromTextFile(rulesPath)
+    val rulesObjs = rules map (ruleFromString(_))
+    val dtries:DList[RuleTrieC] = rulesObjs map {
+      r => (new RuleTrieC).addRule(r)
+    }
+    val dtrie:DObject[RuleTrieC] = dtries.reduce(_+_)
+
+    //val dtrie = DObject(trie)
     val lines:DList[String] = fromTextFile(sentencesDir)
     val foundRules:DList[(String, List[Int])] = (dtrie join lines) map {
       case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
