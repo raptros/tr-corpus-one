@@ -1,14 +1,15 @@
 package trc1
 import com.nicta.scoobi.Scoobi._
 import scala.collection.immutable.Map
+import collection.immutable.TreeMap
 
 /** A character-based prefix trie that pulls up rules for prefixes
   * assumes all strings are already normalized.
   * 
   */
-case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
+case class RuleTrieC(rulesHere:List[Int], subs:TreeMap[Char, RuleTrieC]) {
   def this() = {
-    this(Nil, Map.empty)
+    this(Nil, TreeMap.empty)
   }
 
   /** Finds the set of rules for the longest matching prefix of str.
@@ -18,7 +19,7 @@ case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
     case c::rest => (subs get c) map (_ findRule rest.mkString) getOrElse(rulesHere)
   }
 
-  def newSubs(at:Char, rest:List[Char], id:Int):Map[Char, RuleTrieC] = {
+  def newSubs(at:Char, rest:List[Char], id:Int):TreeMap[Char, RuleTrieC] = {
     val toUpdate = subs.getOrElse(at, new RuleTrieC)
     val updated = toUpdate.addRuleMap(rest.mkString, id)
     subs + (at -> updated)
@@ -43,7 +44,7 @@ case class RuleTrieC(rulesHere:List[Int], subs:Map[Char, RuleTrieC]) {
   def findAllRules(sentence:String):List[Int] = {
     sentence.tails flatMap(findRule(_)) toList
   }
-  def updateM(m:Map[Char, RuleTrieC], pair:(Char, RuleTrieC)):Map[Char, RuleTrieC] = {
+  def updateM(m:TreeMap[Char, RuleTrieC], pair:(Char, RuleTrieC)):TreeMap[Char, RuleTrieC] = {
     val rtc2 = (this.subs get pair._1) map (_ + pair._2) getOrElse (pair._2)
     m + (pair._1 -> rtc2)
   }
