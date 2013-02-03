@@ -20,10 +20,6 @@ object FindRules extends ScoobiApp {
       .reduce(_+_)
   }
 
-  def processAndFind(trie:RuleTrieC, line:String):MatchedSentence = {
-    MatchedSentence(line, trie.findAllRules(line.toLowerCase))
-  }
-
   def run() = {
     val rulesPath = args(0)
     val sentencesDir = args(1)
@@ -48,3 +44,18 @@ object FindRules extends ScoobiApp {
   }
 }
 
+
+@EnhanceStrings
+object Recombine extends ScoobiApp {
+  def run() = {
+    val allSentsPath = args(0)
+    val outPath = args(1)
+    val allSents:DList[String] = fromTextFile(allSentsPath)
+    val allMS:DList[MatchedSentence] = allSents flatMap (MatchedSentenceExtractor.parseIt(_))
+    val grouped:DList[(String, Iterable[(String, List[Int])])] = allMS.groupBy(_._1)
+    val combined:DList[MatchedSentence] = grouped.combine {
+      (a:MatchedSentence, b:MatchedSentence) => (a._1, a._2 ++ b._2)
+    }.map(p => (p._1, p._2._2))
+    persist(toTextFile(combined, outPath))
+  }
+}

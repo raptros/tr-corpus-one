@@ -24,7 +24,8 @@ package object trc1 {
   }
   
 
-  implicit val matchedSentFmt:WireFormat[MatchedSentence] = mkCaseWireFormat(MatchedSentence, MatchedSentence.unapply _)
+  //implicit val matchedSentFmt:WireFormat[MatchedSentence] = mkCaseWireFormat(MatchedSentence, MatchedSentence.unapply _)
+  type MatchedSentence = (String, List[Int])
 
   def ruleFromString(line:String):Rule = {
     val parts = line.split('\t')
