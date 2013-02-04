@@ -12,11 +12,14 @@ case class RuleTrieC(rulesHere:List[Int], subs:TreeMap[Char, RuleTrieC]) {
     this(Nil, TreeMap.empty)
   }
 
+
   /** Finds the set of rules for the longest matching prefix of str.
     */
   def findRule(str:String):List[Int] = str.toList match {
     case Nil => rulesHere
-    case c::rest => (subs get c) map (_ findRule rest.mkString) getOrElse(rulesHere)
+    case c::rest => (subs get c)
+      .map(_ findRule rest.mkString)
+      .getOrElse(if (c.isLetter) Nil else rulesHere)
   }
 
   def newSubs(at:Char, rest:List[Char], id:Int):TreeMap[Char, RuleTrieC] = {
