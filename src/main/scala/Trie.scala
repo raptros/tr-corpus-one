@@ -45,7 +45,7 @@ case class RuleTrieC(rulesHere:List[Int], subs:TreeMap[Char, RuleTrieC]) {
     * @return a list of rule identifiers.
     */
   def findAllRules(sentence:String):List[Int] = {
-    sentence.tails flatMap(findRule(_)) toList
+    atWords(sentence) flatMap(findRule(_)) toList
   }
   def updateM(m:TreeMap[Char, RuleTrieC], pair:(Char, RuleTrieC)):TreeMap[Char, RuleTrieC] = {
     val rtc2 = (this.subs get pair._1) map (_ + pair._2) getOrElse (pair._2)

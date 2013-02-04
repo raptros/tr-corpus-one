@@ -37,4 +37,11 @@ package object trc1 {
   def getCharPos[A](char:Char, array:Array[A]):Option[A] = if (char.intValue < CHARS_LOW) None 
   else if (char.intValue > NUM_CHARS + CHARS_LOW) None 
   else array(char.intValue - CHARS_LOW)*/
+  
+  val words = """\b\b""".r
+  def atWords(s:String):List[String] = {
+    val splitted = (words split s)
+    val filtered = splitted.tails map(_ mkString) withFilter(!_.isEmpty) withFilter(_(0).isLetterOrDigit)
+    filtered.toList.tail
+  }
 }
