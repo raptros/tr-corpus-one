@@ -3,6 +3,7 @@ package object trc1 {
   import java.io.{DataInput, DataOutput}
   import collection.immutable.TreeMap
   implicit val ruleFmt:WireFormat[Rule] = mkCaseWireFormat(Rule, Rule.unapply _)
+  implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
   //implicit val trieFmt:WireFormat[RuleTrieC] = mkCaseWireFormat(RuleTrieC, RuleTrieC.unapply _)
 
   //implicit def TreeMapFmt[CC[X, Y] <: TreeMap[X, Y], K, V](implicit wtK: WireFormat[K], wtV: WireFormat[V], bf: CanBuildFrom[_, (K, V), CC[K, V]]):WireFormat[CC[K, V]] = new TraversableWireFormat(bf())
@@ -42,6 +43,9 @@ package object trc1 {
   def atWords(s:String):List[String] = {
     val splitted = (words split s)
     val filtered = splitted.tails map(_ mkString) withFilter(!_.isEmpty) withFilter(_(0).isLetterOrDigit)
-    filtered.toList.tail
+    filtered toList
   }
+
+
+  val mSep = "<<<@>>>"
 }
