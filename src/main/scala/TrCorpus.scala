@@ -59,3 +59,44 @@ object Recombine extends ScoobiApp {
     persist(toTextFile(combined, outPath))
   }
 }
+
+@EnhanceStrings
+object ApplyRules extends ScoobiApp {
+  def loadRules(rulesPath:String):Array[Rule] = {
+    Source.fromFile(rulesPath)
+    .getLines()
+    .map(ruleFromString(_))
+    .toArray
+  }
+  
+  def translate(pair:(Array[Rule], MatchedSentence)):List[TranslatedSentence] = pair match {
+    case (rules, (sent, rls)) => rls flatMap (rl => (rules lift rl) flatMap (_.applyRule(sent)))
+  }
+
+  def run() = {
+    val rulesPath = args(0)
+    val matchedPath = args(1)
+    val outPath = args(2)
+    println("rulesPath: #rulesPath; matchedPath: #matchedPath; outPath: #outPath")
+    val dRules:DObject[Array[Rule]] = DObject(loadRules(rulesPath))
+    val matchedSentences:DList[MatchedSentence] = fromTextFile(matchedPath) flatMap (MatchedSentenceExtractor.parseIt(_))
+    val translated:DList[TranslatedSentence] = (dRules join matchedSentences) flatMap (translate(_))
+    persist(toDelimitedTextFile(translated, outPath, mSep))
+  }
+}
+
+@EnhanceStrings
+object CountRules extends ScoobiApp {
+  def run() = {
+    val inPath = args(0)
+    val matchedSentences:DList[MatchedSentence] = fromTextFile(inPath) flatMap (MatchedSentenceExtractor.parseIt(_))
+    val freqs:DList[(String, Int)] = matchedSentences.flatMap(_._2).map(_.toString -> 1).groupByKey.combine(_+_)
+    val min:DObject[(String, Int)] = freqs.minBy(_._2)(Ordering.Int)
+    val max:DObject[(String, Int)] = freqs.maxBy(_._2)(Ordering.Int)
+    val count:DObject[Int] = freqs.size
+    val total:DObject[Int] = freqs.map(_._2).sum
+    val (lMin, lMax, lCount:Int, lTotal:Int) = persist(min, max, count, total)
+    val lAvg = lTotal.toDouble / lCount
+    println("min: #lMin, max: #lMax, avg: #lAvg")
+  }
+}

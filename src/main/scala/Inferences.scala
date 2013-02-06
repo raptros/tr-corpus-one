@@ -1,7 +1,10 @@
 package trc1
 import util.parsing.combinator._
 
-case class Rule(id:Int, lhs:String, rhs:String, weight:Double)
+case class Rule(id:Int, lhs:String, rhs:String, weight:Double) {
+  /** applies this rule to a sentence producing a TranslatedSentence */
+  def applyRule(orig:String):Option[TranslatedSentence] = Some(TranslatedSentence(orig, orig, id))
+}
 
 /*case class MatchedSentence(sentence:String, rules:List[Int]) {
   def combineFirst(ms:MatchedSentence):MatchedSentence = MatchedSentence(sentence, rules ++ ms.rules)
@@ -18,3 +21,5 @@ case object MatchedSentenceExtractor extends JavaTokenParsers {
   def rules:Parser[List[Int]] = "(" ~> repsep(int, ",") <~ ")" 
   def int = decimalNumber ^^ (_.toInt)
 }
+
+case class TranslatedSentence(orig:String, trans:String, ruleId:Int)
