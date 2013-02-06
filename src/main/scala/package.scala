@@ -42,6 +42,6 @@ package object trc1 {
   def atWords(s:String):List[String] = {
     val splitted = (words split s)
     val filtered = splitted.tails map(_ mkString) withFilter(!_.isEmpty) withFilter(_(0).isLetterOrDigit)
-    filtered.toList.tail
+    filtered toList
   }
 }

@@ -36,7 +36,7 @@ libraryDependencies ++= Seq(
 
 scalacOptions ++= Seq("-deprecation", "-Ydependent-method-types", "-unchecked")
 
-jarName in assembly := "tr-corpus-one-assembly.jar"
+jarName in assembly := "tacc-hadoop-assembly.jar"
 
 mainClass in assembly := None
 
