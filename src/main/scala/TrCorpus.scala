@@ -100,3 +100,65 @@ object CountRules extends ScoobiApp {
     println("min: #lMin, max: #lMax, avg: #lAvg")
   }
 }
+
+@EnhanceStrings
+object MaxTransform extends ScoobiApp {
+  def run() = {
+    val rulesPath = args(0)
+    val batchPath = args(1)
+    val outPath = args(2)
+    //get the rules trie
+    val dtrie = getTrie(rulesPath)
+    //match sentences
+    val matched = matchSents(dtrie, batchPath)
+    //load rules
+    val rules:Map[Int, Rule] = loadRules(rulesPath)
+    //apply the rules to transform the sentences
+    val translated = applyRules(DObject(rules), matched)
+    persist(toDelimitedTextFile(translated, outPath, mSep))
+    //group by rule
+    val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
+    val freqs:DList[(Int, Int)] = transByRule map (p => p._1 -> p._2.size)
+    persist(toTextFile(freqs, outPath + "-freqs"))
+    //now report the occurances at this stage
+    val count:DObject[Int] = transByRule.size
+    val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
+    val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
+    val totalApplications:DObject[Int] = freqs.map(_._2).sum
+    val (lCount, lMin, lMax, lTotal) = persist(count, min, max, totalApplications)
+    val lAvg = lTotal.toDouble / lCount
+    val missing = rules.size - lCount
+    println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
+
+  }
+
+  def getTrie(rulesPath:String):DObject[RuleTrieC] = {
+    fromTextFile(rulesPath)
+    .map(ruleFromString(_))
+    .map(r => (new RuleTrieC).addRule(r))
+    .reduce(_+_)
+  }
+  
+  def matchSents(dtrie:DObject[RuleTrieC], sentsPath:String):DList[MatchedSentence] = {
+    val lines:DList[String] = fromTextFile(sentsPath)
+    (dtrie join lines) map {
+      case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
+    }
+  }
+  
+  def applyRules(dRules:DObject[Map[Int, Rule]], matched:DList[MatchedSentence]):DList[TranslatedSentence] = {
+    (dRules join matched) flatMap (lookupAndTranslate(_))
+  }
+
+  def loadRules(rulesPath:String):Map[Int, Rule] = {
+    Source.fromFile(rulesPath).getLines()
+    .map(ruleFromString(_))
+    .map(r => (r.id -> r))
+    .toMap
+  }
+
+  def lookupAndTranslate(pair:(Map[Int, Rule], MatchedSentence)):List[TranslatedSentence] = pair match {
+    case (rules, (sent, rls)) => rls flatMap (rl => (rules get rl) flatMap (_.applyRule(sent)))
+  }
+
+}

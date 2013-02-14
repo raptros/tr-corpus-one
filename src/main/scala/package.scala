@@ -23,6 +23,10 @@ package object trc1 {
     def show(rtc:RuleTrieC):String = rtc.toString
 
   }
+
+  import scala.util.matching.Regex
+  val swapRule = "@R@".r
+  val ruleExtract = new Regex("^([^@]*)(@R@)?", "rule", "r")
   
 
   //implicit val matchedSentFmt:WireFormat[MatchedSentence] = mkCaseWireFormat(MatchedSentence, MatchedSentence.unapply _)

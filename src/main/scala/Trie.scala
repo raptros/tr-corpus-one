@@ -35,9 +35,9 @@ case class RuleTrieC(rulesHere:List[Int], subs:TreeMap[Char, RuleTrieC]) {
 
   def stripVar(str:String):String = """@R@""".r.replaceAllIn(str, "")
 
-  /** adds both the left and right sides of a Rule, removing the var string (@R@) */
+  /** adds only the left side of the rule, removing the var string (@R@) */
   def addRule(rule:Rule):RuleTrieC = {
-    addRuleMap(stripVar(rule.lhs), rule.id).addRuleMap(stripVar(rule.rhs), rule.id)
+    addRuleMap(stripVar(rule.lhs), rule.id)
   }
 
   /** finds rules for every suffix of the input sentence.
