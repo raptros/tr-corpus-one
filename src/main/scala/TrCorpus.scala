@@ -108,15 +108,14 @@ object MaxTransform extends ScoobiApp {
     val batchPath = args(1)
     val outPath = args(2)
     //get the rules trie
-    val dtrie = getTrie(rulesPath)
+    val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
+    val dRuleCount:DObject[Int] = dRules.size
+    val dtrie = dRules.map(r => (new RuleTrieC).addRule(r)).reduce(_+_)
     //match sentences
     val matched = matchSents(dtrie, batchPath)
     //regroup the sentences and make a map
     val sentsByRule = regroupMatched(matched)
     val mappedSents:DObject[Map[Int, List[String]]] = sentsByRule.materialize map (_ toMap)
-    //load rules
-    val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
-    val dRuleCount:DObject[Int] = dRules.size
     //apply the rules to transform the sentences
     val translated = applyRules(dRules, mappedSents)
     persist(toDelimitedTextFile(translated, outPath, mSep))
@@ -135,12 +134,12 @@ object MaxTransform extends ScoobiApp {
     println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
 
   }
-  def getTrie(rulesPath:String):DObject[RuleTrieC] = {
+  /*def getTrie(rulesPath:String):DObject[RuleTrieC] = {
     fromTextFile(rulesPath)
     .map(ruleFromString(_))
     .map(r => (new RuleTrieC).addRule(r))
     .reduce(_+_)
-  }
+  }*/
   
   def matchSents(dtrie:DObject[RuleTrieC], sentsPath:String):DList[MatchedSentence] = {
     val lines:DList[String] = fromTextFile(sentsPath)
@@ -160,10 +159,10 @@ object MaxTransform extends ScoobiApp {
     case (sentsMap, rule) => lookupAndTranslate(sentsMap, rule)
   }
 
-  def loadRules(rulesPath:String):DObject[Map[Int, Rule]] = fromTextFile(rulesPath) 
+  /*def loadRules(rulesPath:String):DObject[Map[Int, Rule]] = fromTextFile(rulesPath) 
   .map(ruleFromString(_)) //to rules
   .map(r => Map(r.id -> r)) //to maps
-  .reduce(_ ++ _) //combine maps
+  .reduce(_ ++ _) //combine maps*/
 
   def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:Rule):List[TranslatedSentence] = for {
     sents <- (sentsMap get rule.id).toList
