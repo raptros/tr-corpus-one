@@ -111,11 +111,14 @@ object MaxTransform extends ScoobiApp {
     val dtrie = getTrie(rulesPath)
     //match sentences
     val matched = matchSents(dtrie, batchPath)
+    //regroup the sentences and make a map
+    val sentsByRule = regroupMatched(matched)
+    val mappedSents:DObject[Map[Int, List[String]]] = sentsByRule.materialize map (_ toMap)
     //load rules
-    val dRules:DObject[Map[Int, Rule]] = loadRules(rulesPath)
-    val ruleCount:Int = persist(dRules map (_ size))
+    val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
+    val dRuleCount:DObject[Int] = dRules.size
     //apply the rules to transform the sentences
-    val translated = applyRules(dRules, matched)
+    val translated = applyRules(dRules, mappedSents)
     persist(toDelimitedTextFile(translated, outPath, mSep))
     //group by rule
     val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
@@ -126,13 +129,12 @@ object MaxTransform extends ScoobiApp {
     val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
     val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
     val totalApplications:DObject[Int] = freqs.map(_._2).sum
-    val (lCount, lMin, lMax, lTotal) = persist(count, min, max, totalApplications)
+    val (lCount, lMin, lMax, lTotal, lRuleCount) = persist(count, min, max, totalApplications, dRuleCount)
     val lAvg = lTotal.toDouble / lCount
-    val missing = ruleCount - lCount
+    val missing = lRuleCount - lCount
     println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
 
   }
-
   def getTrie(rulesPath:String):DObject[RuleTrieC] = {
     fromTextFile(rulesPath)
     .map(ruleFromString(_))
@@ -146,9 +148,16 @@ object MaxTransform extends ScoobiApp {
       case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
     }
   }
+
+  def regroupMatched(matched:DList[MatchedSentence]):DList[(Int, List[String])] = {
+    val withRules:DList[(Int, String)] = matched flatMap {sPair => sPair._2 map (_ -> sPair._1)}
+    val grouped:DList[(Int, Iterable[(Int, String)])] = withRules groupBy (_._1)
+    grouped map {rPair => (rPair._1 -> rPair._2.map(_._2).toList)}
+  }
+
   
-  def applyRules(dRules:DObject[Map[Int, Rule]], matched:DList[MatchedSentence]):DList[TranslatedSentence] = {
-    (dRules join matched) flatMap (lookupAndTranslate(_))
+  def applyRules(dRules:DList[Rule], sents:DObject[Map[Int, List[String]]]):DList[TranslatedSentence] = (sents join dRules) flatMap {
+    case (sentsMap, rule) => lookupAndTranslate(sentsMap, rule)
   }
 
   def loadRules(rulesPath:String):DObject[Map[Int, Rule]] = fromTextFile(rulesPath) 
@@ -156,8 +165,9 @@ object MaxTransform extends ScoobiApp {
   .map(r => Map(r.id -> r)) //to maps
   .reduce(_ ++ _) //combine maps
 
-  def lookupAndTranslate(pair:(Map[Int, Rule], MatchedSentence)):List[TranslatedSentence] = pair match {
-    case (rules, (sent, rls)) => rls flatMap (rl => (rules get rl) flatMap (_.applyRule(sent)))
-  }
-
+  def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:Rule):List[TranslatedSentence] = for {
+    sents <- (sentsMap get rule.id).toList
+    sent <- sents
+    translated <- rule applyRule sent
+  } yield translated
 }
