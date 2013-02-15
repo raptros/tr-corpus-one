@@ -50,6 +50,8 @@ package object trc1 {
     filtered toList
   }
 
+  def stripVar(str:String):String = swapRule.replaceAllIn(str, "")
+
 
   val mSep = "<<<@>>>"
 }

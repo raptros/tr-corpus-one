@@ -1,5 +1,6 @@
 package trc1
 import com.nicta.scoobi.Scoobi._
+import com.nicta.scoobi.lib.Relational
 
 import scala.io.Source
 
@@ -60,7 +61,7 @@ object Recombine extends ScoobiApp {
   }
 }
 
-@EnhanceStrings
+/*@EnhanceStrings
 object ApplyRules extends ScoobiApp {
   def loadRules(rulesPath:String):Array[Rule] = {
     Source.fromFile(rulesPath)
@@ -84,7 +85,7 @@ object ApplyRules extends ScoobiApp {
     persist(toDelimitedTextFile(translated, outPath, mSep))
   }
 }
-
+*/
 @EnhanceStrings
 object CountRules extends ScoobiApp {
   def run() = {
@@ -110,21 +111,21 @@ object MaxTransform extends ScoobiApp {
     //get the rules trie
     val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
     val dRuleCount:DObject[Int] = dRules.size
-    val dtrie = dRules.map(r => (new RuleTrieC).addRule(r)).reduce(_+_)
     //match sentences
-    val matched = matchSents(dtrie, batchPath)
-    //regroup the sentences and make a map
+    val matched = matchSents(dRules, batchPath)
+    //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
-    val mappedSents:DObject[Map[Int, List[String]]] = sentsByRule.materialize map (_ toMap)
     //apply the rules to transform the sentences
-    val translated = applyRules(dRules, mappedSents)
-    persist(toDelimitedTextFile(translated, outPath, mSep))
+    val translated = applyRules(dRules, sentsByRule)
+    val flatlated = translated flatMap (p => p._2)
+    persist(toDelimitedTextFile(flatlated, outPath, mSep))
     //group by rule
-    val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
-    val freqs:DList[(Int, Int)] = transByRule map (p => p._1 -> p._2.size)
+    //val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
+    //do frequency count
+    val freqs:DList[(Int, Int)] = translated map (p => p._1 -> p._2.size)
     persist(toTextFile(freqs, outPath + "-freqs"))
     //now report the occurances at this stage
-    val count:DObject[Int] = transByRule.size
+    val count:DObject[Int] = translated.size
     val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
     val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
     val totalApplications:DObject[Int] = freqs.map(_._2).sum
@@ -134,14 +135,9 @@ object MaxTransform extends ScoobiApp {
     println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
 
   }
-  /*def getTrie(rulesPath:String):DObject[RuleTrieC] = {
-    fromTextFile(rulesPath)
-    .map(ruleFromString(_))
-    .map(r => (new RuleTrieC).addRule(r))
-    .reduce(_+_)
-  }*/
   
-  def matchSents(dtrie:DObject[RuleTrieC], sentsPath:String):DList[MatchedSentence] = {
+  def matchSents(dRules:DList[Rule], sentsPath:String):DList[MatchedSentence] = {
+    val dtrie = dRules.map(r => (new RuleTrieC).addRule(r)).reduce(_+_)
     val lines:DList[String] = fromTextFile(sentsPath)
     (dtrie join lines) map {
       case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
@@ -155,18 +151,23 @@ object MaxTransform extends ScoobiApp {
   }
 
   
-  def applyRules(dRules:DList[Rule], sents:DObject[Map[Int, List[String]]]):DList[TranslatedSentence] = (sents join dRules) flatMap {
-    case (sentsMap, rule) => lookupAndTranslate(sentsMap, rule)
+  def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[(Int, List[TranslatedSentence])] = {
+    val indexedRules:DList[(Int, Rule)] = dRules map (r => r.id -> r)
+    val joint:DList[(Int, (Rule, List[String]))] = Relational.join(indexedRules, sents)
+    joint map {
+      case (id, (rule, sents)) => id -> applySingleRule(rule, sents)
+    }
   }
 
-  /*def loadRules(rulesPath:String):DObject[Map[Int, Rule]] = fromTextFile(rulesPath) 
-  .map(ruleFromString(_)) //to rules
-  .map(r => Map(r.id -> r)) //to maps
-  .reduce(_ ++ _) //combine maps*/
+  def applySingleRule(rule:Rule, sents:List[String]):List[TranslatedSentence] = {
+    val applier = new RuleApplier(rule)
+    sents flatMap (applier(_))
+  }
 
-  def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:Rule):List[TranslatedSentence] = for {
+
+  def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:RuleApplier):List[TranslatedSentence] = for {
     sents <- (sentsMap get rule.id).toList
     sent <- sents
-    translated <- rule applyRule sent
+    translated <- rule(sent)
   } yield translated
 }

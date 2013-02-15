@@ -33,8 +33,6 @@ case class RuleTrieC(rulesHere:List[Int], subs:TreeMap[Char, RuleTrieC]) {
     case c::rest => RuleTrieC(rulesHere, newSubs(c, rest, id))
   }
 
-  def stripVar(str:String):String = """@R@""".r.replaceAllIn(str, "")
-
   /** adds only the left side of the rule, removing the var string (@R@) */
   def addRule(rule:Rule):RuleTrieC = {
     addRuleMap(stripVar(rule.lhs), rule.id)
