@@ -61,31 +61,6 @@ object Recombine extends ScoobiApp {
   }
 }
 
-/*@EnhanceStrings
-object ApplyRules extends ScoobiApp {
-  def loadRules(rulesPath:String):Array[Rule] = {
-    Source.fromFile(rulesPath)
-    .getLines()
-    .map(ruleFromString(_))
-    .toArray
-  }
-  
-  def translate(pair:(Array[Rule], MatchedSentence)):List[TranslatedSentence] = pair match {
-    case (rules, (sent, rls)) => rls flatMap (rl => (rules lift rl) flatMap (_.applyRule(sent)))
-  }
-
-  def run() = {
-    val rulesPath = args(0)
-    val matchedPath = args(1)
-    val outPath = args(2)
-    println("rulesPath: #rulesPath; matchedPath: #matchedPath; outPath: #outPath")
-    val dRules:DObject[Array[Rule]] = DObject(loadRules(rulesPath))
-    val matchedSentences:DList[MatchedSentence] = fromTextFile(matchedPath) flatMap (MatchedSentenceExtractor.parseIt(_))
-    val translated:DList[TranslatedSentence] = (dRules join matchedSentences) flatMap (translate(_))
-    persist(toDelimitedTextFile(translated, outPath, mSep))
-  }
-}
-*/
 @EnhanceStrings
 object CountRules extends ScoobiApp {
   def run() = {
@@ -118,7 +93,12 @@ object MaxTransform extends ScoobiApp {
     //apply the rules to transform the sentences
     val translated = applyRules(dRules, sentsByRule)
     val flatlated = translated flatMap (p => p._2)
+    //now create FOL pairs from the translated sentences
+
+
     persist(toDelimitedTextFile(flatlated, outPath, mSep))
+    
+
     //group by rule
     //val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
     //do frequency count
@@ -164,10 +144,19 @@ object MaxTransform extends ScoobiApp {
     sents flatMap (applier(_))
   }
 
-
   def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:RuleApplier):List[TranslatedSentence] = for {
     sents <- (sentsMap get rule.id).toList
     sent <- sents
     translated <- rule(sent)
   } yield translated
+
+  def convertToFOL(translateds:DList[TranslatedSentence]):DList[FOLPair] = {
+    for {
+      p <- translateds groupBy (_.orig)
+      val (orig, tss) = p
+      oFOL <- ConvertToFOL(orig).toIterable
+      ts <- tss
+      tFOL <- ConvertToFOL(ts.trans)
+    } yield FOLPair(oFOL, tFOL, ts.ruleId)
+  }
 }
