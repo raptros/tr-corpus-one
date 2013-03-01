@@ -94,25 +94,22 @@ object MaxTransform extends ScoobiApp {
     val translated = applyRules(dRules, sentsByRule)
     val flatlated = translated flatMap (p => p._2)
     //now create FOL pairs from the translated sentences
-
-
-    persist(toDelimitedTextFile(flatlated, outPath, mSep))
-    
-
+    val folPairs = convertToFOL(flatlated)
+    persist(toDelimitedTextFile(folPairs, outPath, mSep))
     //group by rule
     //val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
     //do frequency count
-    val freqs:DList[(Int, Int)] = translated map (p => p._1 -> p._2.size)
-    persist(toTextFile(freqs, outPath + "-freqs"))
+    //val freqs:DList[(Int, Int)] = translated map (p => p._1 -> p._2.size)
+    //persist(toTextFile(freqs, outPath + "-freqs"))
     //now report the occurances at this stage
-    val count:DObject[Int] = translated.size
-    val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
-    val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
-    val totalApplications:DObject[Int] = freqs.map(_._2).sum
-    val (lCount, lMin, lMax, lTotal, lRuleCount) = persist(count, min, max, totalApplications, dRuleCount)
-    val lAvg = lTotal.toDouble / lCount
-    val missing = lRuleCount - lCount
-    println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
+    //val count:DObject[Int] = translated.size
+    //val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
+    //val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
+    //val totalApplications:DObject[Int] = freqs.map(_._2).sum
+    //val (lCount, lMin, lMax, lTotal, lRuleCount) = persist(count, min, max, totalApplications, dRuleCount)
+    //val lAvg = lTotal.toDouble / lCount
+    //val missing = lRuleCount - lCount
+    //println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
 
   }
   
