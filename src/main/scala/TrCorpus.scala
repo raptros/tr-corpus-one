@@ -91,26 +91,10 @@ object MaxTransform extends ScoobiApp {
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
-    val translated = applyRules(dRules, sentsByRule)
-    val flatlated = translated flatMap (p => p._2)
+    val translated = applyRules(dRules, sentsByRule) groupBy (_.orig)
     //now create FOL pairs from the translated sentences
-    val folPairs = convertToFOL(flatlated)
+    val folPairs = convertToFOL(translated)
     persist(toDelimitedTextFile(folPairs, outPath, mSep))
-    //group by rule
-    //val transByRule:DList[(Int, List[TranslatedSentence])] = translated.groupBy(_.ruleId) map (p => p._1 -> p._2.toList)
-    //do frequency count
-    //val freqs:DList[(Int, Int)] = translated map (p => p._1 -> p._2.size)
-    //persist(toTextFile(freqs, outPath + "-freqs"))
-    //now report the occurances at this stage
-    //val count:DObject[Int] = translated.size
-    //val min:DObject[(Int, Int)] = freqs.minBy(_._2)(Ordering.Int)
-    //val max:DObject[(Int, Int)] = freqs.maxBy(_._2)(Ordering.Int)
-    //val totalApplications:DObject[Int] = freqs.map(_._2).sum
-    //val (lCount, lMin, lMax, lTotal, lRuleCount) = persist(count, min, max, totalApplications, dRuleCount)
-    //val lAvg = lTotal.toDouble / lCount
-    //val missing = lRuleCount - lCount
-    //println("count: #lCount, missing: #missing, min: #lMin, max: #lMax, avg: #lAvg")
-
   }
   
   def matchSents(dRules:DList[Rule], sentsPath:String):DList[MatchedSentence] = {
@@ -128,11 +112,11 @@ object MaxTransform extends ScoobiApp {
   }
 
   
-  def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[(Int, List[TranslatedSentence])] = {
+  def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[TranslatedSentence] = {
     val indexedRules:DList[(Int, Rule)] = dRules map (r => r.id -> r)
     val joint:DList[(Int, (Rule, List[String]))] = Relational.join(indexedRules, sents)
-    joint map {
-      case (id, (rule, sents)) => id -> applySingleRule(rule, sents)
+    joint flatMap {
+      case (id, (rule, sents)) => applySingleRule(rule, sents)
     }
   }
 
@@ -141,15 +125,9 @@ object MaxTransform extends ScoobiApp {
     sents flatMap (applier(_))
   }
 
-  def lookupAndTranslate(sentsMap:Map[Int, List[String]], rule:RuleApplier):List[TranslatedSentence] = for {
-    sents <- (sentsMap get rule.id).toList
-    sent <- sents
-    translated <- rule(sent)
-  } yield translated
-
-  def convertToFOL(translateds:DList[TranslatedSentence]):DList[FOLPair] = {
+  def convertToFOL(translateds:DList[(String, Iterable[TranslatedSentence])]):DList[FOLPair] = {
     for {
-      p <- translateds groupBy (_.orig)
+      p <- translateds
       val (orig, tss) = p
       oFOL <- ConvertToFOL(orig).toIterable
       ts <- tss

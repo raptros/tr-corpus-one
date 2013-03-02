@@ -15,7 +15,8 @@ object ConvertToFOL {
 
   def requestFOL(sentence:String):Option[String] = {
     try {
-      val lStream:Stream[String] = (sentence #> soapClient #| boxer lines)
+      val echo = "echo " + sentence
+      val lStream:Stream[String] = (echo #| soapClient #| boxer lines_!)
       lStream.lastOption
     } catch {
       case _ => None
