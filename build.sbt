@@ -34,6 +34,10 @@ libraryDependencies ++= Seq(
   "commons-lang" % "commons-lang" % "2.6"
 )
 
+libraryDependencies += "scala-logic" %% "scala-logic" % "0.0.1-SNAPSHOT"
+
+libraryDependencies += "mln-semantics" %% "mln-semantics" % "0.0.1-SNAPSHOT"
+
 scalacOptions ++= Seq("-deprecation", "-Ydependent-method-types", "-unchecked")
 
 jarName in assembly := "tacc-hadoop-assembly.jar"
