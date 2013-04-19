@@ -2,7 +2,7 @@ package trc1
 import com.nicta.scoobi.Scoobi._
 import com.nicta.scoobi.lib.Relational
 import scala.io.Source
-
+import logic.{ConvertToCNF,FolContainer}
 
 /** MaxTransform is meant to implement the complete pipeline for converting the lexical rules into FOL.
   *
@@ -14,7 +14,7 @@ object MaxTransform extends ScoobiApp {
     val rulesPath = args(0)
     val batchPath = args(1)
     val outPath = args(2)
-    //get the rules trie
+    //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
     val dRuleCount:DObject[Int] = dRules.size
     //match sentences
@@ -68,94 +68,18 @@ object MaxTransform extends ScoobiApp {
 
   /** convert to FOL */
   def ts2fp(ts:TranslatedSentence):Option[FOLPair] = for {
-    oFOL <- ConvertWithMSEM(ts.orig)
-    tFOL <- ConvertWithMSEM(ts.trans)
-  } yield FOLPair(ts.orig, ts.trans, oFOL, tFOL, ts.rule, ts.ruleId)
+    oFOL <- GetFOL(ts.orig)
+    val oCNF = ConvertToCNF(oFOL)
+    val oLists = FolContainer.cnfToLists(oCNF)
+    tFOL <- GetFOL(ts.trans)
+    val tCNF = ConvertToCNF(-tFOL)
+    val tLists = FolContainer.cnfToLists(tCNF)
+  } yield FOLPair(ts.orig, ts.trans, 
+    fToString(oFOL, oCNF, oLists), 
+    fToString(tFOL, tCNF, tLists), 
+    ts.rule, ts.ruleId)
 
-      /*
-    for {
-    p <- translateds
-    val (orig, tss) = p
-    oFOL <- ConvertToFOL(orig).toIterable
-    ts <- tss
-    tFOL <- ConvertToFOL(ts.trans)
-  } yield FOLPair(oFOL, tFOL, ts.ruleId)*/
-}
-
-
-
-//the rest of these are obsolete.
-
-@EnhanceStrings
-object FindRules extends ScoobiApp {
-
-  /** builds a rule-loading trie from the rules file.
-    */
-  def getRuleFinder(rulesPath:String) = {
-    //val rtc = new RuleTrieC
-    //a lambda that takes a tuple containing a rule and an int
-    //and calls into the rtc's add method
-    //val addRule = (rtc.addRule(_:Rule, _:Int)).tupled
-    Source.fromFile(rulesPath)
-      .getLines()
-      .map(ruleFromString(_))
-      .map((new RuleTrieC).addRule(_))
-      .reduce(_+_)
-  }
-
-  def run() = {
-    val rulesPath = args(0)
-    val sentencesDir = args(1)
-    val outFile = args(2)
-    println("rulesPath: #rulesPath; sentencesDir: #sentencesDir; outFile: #outFile")
-    //val trie = getRuleFinder(rulesPath)
-    //println(trie)
-    
-    val rules:DList[String] = fromTextFile(rulesPath)
-    val rulesObjs = rules map (ruleFromString(_))
-    val dtries:DList[RuleTrieC] = rulesObjs map {
-      r => (new RuleTrieC).addRule(r)
-    }
-    val dtrie:DObject[RuleTrieC] = dtries.reduce(_+_)
-
-    //val dtrie = DObject(trie)
-    val lines:DList[String] = fromTextFile(sentencesDir)
-    val foundRules:DList[(String, List[Int])] = (dtrie join lines) map {
-      case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
-    }
-    persist(toTextFile(foundRules, outFile))
+  def fToString(fol:Any, cnf:Any, lists:Any):String = {
+    fol.toString + mSep + cnf.toString + mSep + lists.toString
   }
 }
-
-
-@EnhanceStrings
-object Recombine extends ScoobiApp {
-  def run() = {
-    val allSentsPath = args(0)
-    val outPath = args(1)
-    val allSents:DList[String] = fromTextFile(allSentsPath)
-    val allMS:DList[MatchedSentence] = allSents flatMap (MatchedSentenceExtractor.parseIt(_))
-    val grouped:DList[(String, Iterable[(String, List[Int])])] = allMS.groupBy(_._1)
-    val combined:DList[MatchedSentence] = grouped.combine {
-      (a:MatchedSentence, b:MatchedSentence) => (a._1, a._2 ++ b._2)
-    }.map(p => (p._1, p._2._2))
-    persist(toTextFile(combined, outPath))
-  }
-}
-
-@EnhanceStrings
-object CountRules extends ScoobiApp {
-  def run() = {
-    val inPath = args(0)
-    val matchedSentences:DList[MatchedSentence] = fromTextFile(inPath) flatMap (MatchedSentenceExtractor.parseIt(_))
-    val freqs:DList[(String, Int)] = matchedSentences.flatMap(_._2).map(_.toString -> 1).groupByKey.combine(_+_)
-    val min:DObject[(String, Int)] = freqs.minBy(_._2)(Ordering.Int)
-    val max:DObject[(String, Int)] = freqs.maxBy(_._2)(Ordering.Int)
-    val count:DObject[Int] = freqs.size
-    val total:DObject[Int] = freqs.map(_._2).sum
-    val (lMin, lMax, lCount:Int, lTotal:Int) = persist(min, max, count, total)
-    val lAvg = lTotal.toDouble / lCount
-    println("min: #lMin, max: #lMax, avg: #lAvg")
-  }
-}
-

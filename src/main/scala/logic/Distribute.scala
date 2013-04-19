@@ -1,4 +1,4 @@
-package trc1.mlnsem
+package trc1.logic
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
 import utcompling.mlnsemantics.modal._
@@ -21,6 +21,7 @@ sealed abstract class FolContainer {
   def toCNF:FolContainer
   /**convert back to an FolExpression (handy)*/
   def toFOLE:FolExpression
+  
 }
 
 /**basis for or and and lists*/
@@ -78,4 +79,16 @@ object FolContainer {
     case FolOrExpression(first, second) => OrList(List(FolContainer(first), FolContainer(second)))
     case x => AtomicExpression(x)
   }
+  def cnfToLists(fol:FolExpression):List[List[String]] = apply(fol).consolidate match {
+    case AtomicExpression(exp) => List(List(exp.toString))
+    case (fj:FolJunction) => fj.juncts map (cnfToListsInner(_))
+  }
+
+  def cnfToListsInner(junct:FolContainer):List[String] = junct match {
+    case AtomicExpression(exp) => List(exp.toString)
+    case (fj:FolJunction) => fj.juncts map (_.toFOLE.toString)
+  }
+
+  
+
 }

@@ -31,23 +31,6 @@ class RuleApplier(val rule:Rule) {
 
 }
 
-/*case class MatchedSentence(sentence:String, rules:List[Int]) {
-  def combineFirst(ms:MatchedSentence):MatchedSentence = MatchedSentence(sentence, rules ++ ms.rules)
-  def toString = "(" + sentence + "," + rules + ")"
-}*/
-
-/** not used anymore.*/
-case object MatchedSentenceExtractor extends JavaTokenParsers {
-  def parseIt(l:String):Option[MatchedSentence] = {
-    val parts = l.split(",List")
-    val head = parts(0).tail
-    val tail:Option[List[Int]] = parseAll(rules, parts(1).init) map (Some(_)) getOrElse(None)
-    tail map (head -> _)
-  }
-  def rules:Parser[List[Int]] = "(" ~> repsep(int, ",") <~ ")" 
-  def int = decimalNumber ^^ (_.toInt)
-}
-
 /** represents a sentence that's been transformed by lexical rules.*/
 //case class TranslatedSentence(orig:String, trans:String, ruleId:Int)
 case class TranslatedSentence(orig:String, trans:String, rule:String, ruleId:Int)
