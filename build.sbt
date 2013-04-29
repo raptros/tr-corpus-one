@@ -34,9 +34,13 @@ libraryDependencies ++= Seq(
   "commons-lang" % "commons-lang" % "2.6"
 )
 
-libraryDependencies += "scala-logic" %% "scala-logic" % "0.0.1-SNAPSHOT"
+//libraryDependencies += "scala-logic" %% "scala-logic" % "0.0.1-SNAPSHOT"
 
-libraryDependencies += "mln-semantics" %% "mln-semantics" % "0.0.1-SNAPSHOT"
+//libraryDependencies += "com.nicta" %% "scoobi" % "0.6.1-cdh4"
+
+//libraryDependencies += "mln-semantics" %% "mln-semantics" % "1.0.1-SNAPSHOT"
+
+libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.0.0-M3"
 
 scalacOptions ++= Seq("-deprecation", "-Ydependent-method-types", "-unchecked")
 
