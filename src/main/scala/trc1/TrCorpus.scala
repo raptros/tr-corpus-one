@@ -70,19 +70,22 @@ object MaxTransform extends ScoobiApp {
 
   /** converts sentences in the pairs into FOL formulae.*/
   def applyFOLExtractor(translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
-    translateds flatMap (ts2fp(_))
+    translateds groupBy (_.orig) flatMap ((extractRules(_,_)).tupled)
   }
 
   /** convert to FOL */
-  def ts2fp(ts:TranslatedSentence):Option[IRFHolder] = for {
-    oFOL <- GetFOL(ts.orig)
-    oCNF <- ConvertToCNF(oFOL)(_ + "1")
-    oLists <- try { Some(FolContainer.cnfToLists(oCNF)) } catch { case (t:Throwable) => {println("failed lists conv on " + ts.orig); None}}
-    tFOL <- GetFOL(ts.trans)
-    tCNF <- ConvertToCNF(-tFOL)(_ + "2")
-    tLists <- try { Some(FolContainer.cnfToLists(tCNF)) } catch { case (t:Throwable) => {println("failed lists conv on " + ts.trans); None}}
+  def extractRules(orig:String, tss:Iterable[TranslatedSentence]):Iterable[IRFHolder] = for {
+    oLists <- getCNF(orig, "1").toIterable
+    ts <- tss
+    tLists <- getCNF(ts.trans, "2", true)
     (fLeft, fRight) <- Resolution.resolveToFindDifference(oLists, tLists)
   } yield RuleTypeChange.bringIRF(fLeft, ts.ruleId, ts.weight)
+  
+  def getCNF(sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
+    fol <- GetFOL(sent)
+    cnf <- ConvertToCNF(if (negate) -fol else fol)(_ + id)
+    lists <- try { Some(FolContainer.cnfToLists(cnf)) } catch { case (t:Throwable) => {println("failed lists conv on " + sent); None}}
+  } yield lists
 
   def fToString(fol:Any, cnf:Any, lists:List[List[String]]):String = {
     /*fol.toString + mSep + cnf.toString + mSep +*/ (lists map (l => l map (s => "\"" + s +"\""))).toString
