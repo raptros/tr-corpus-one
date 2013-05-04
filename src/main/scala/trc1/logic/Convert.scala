@@ -19,13 +19,39 @@ import utcompling.scalalogic.top.expression.Variable
   * -drop universals
   * -distribute all disjunctions over conjunctions
   */
-object ConvertToCNF extends ElimImplication with PushNegation with Skolemize with DropUniversal with DistributeOrOverAnd with
-FixVariableNames {
+object ConvertToCNF extends FixVariableNames with ElimImplication with PushNegation with Skolemize with DropUniversal with
+DistributeOrOverAnd {
   import scalaz.syntax.std.function1._
   import scalaz.syntax.id._
-  def apply(fol:FolExpression)(fix:(String => String)):FolExpression = {
+  def apply(fol:FolExpression)(fix:(String => String)):Option[FolExpression] = {
     //do not apply normalization - instead assume that at this point anything from 
     fol |> (fixVariableNames(fix)(_)) |> (elimImplication(_)) |> (pushNegation(_)) |> (skolemize(_)) |> (dropUniversal(_)) |> (distributeOrOverAnd(_))
+  }
+}
+
+trait FixVariableNames {
+  def fixVariableNames(fix:(String => String))(fol:FolExpression):FolExpression = {
+    val fixV = fixVariableNames(fix)(_)
+    val rename = renameVariable(fix)(_, _)
+    fol match {
+      case FolIfExpression(first, second) => fixV(first) -> fixV(second)
+      case FolIffExpression(first, second) => fixV(first) <-> fixV(second)
+      //just keep searching
+      case FolAllExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).all(nVar)}
+      case FolExistsExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).exists(nVar)}
+      case FolAndExpression(first, second) => fixV(first) & fixV(second)
+      case FolEqualityExpression(first, second) => FolEqualityExpression(fixV(first), fixV(second))
+      case FolOrExpression(first, second) => fixV(first) | fixV(second)
+      case FolNegatedExpression(term) => -fixV(term)
+      case (varexp:FolVariableExpression) => varexp
+      //pretty sure these are useless
+      case FolLambdaExpression(variable, term) => FolLambdaExpression(variable, fixV(term))
+      case FolApplicationExpression(func, arg) => FolApplicationExpression(func, fixV(arg))
+    }
+  }
+  def renameVariable(fix:(String => String))(variable:Variable, term:FolExpression):(Variable, FolExpression) = {
+    val newVar = Variable(fix(variable.name))
+    (newVar, term.replace(variable, FolVariableExpression(newVar)))
   }
 }
 
@@ -132,32 +158,10 @@ trait DropUniversal {
 }
 
 trait DistributeOrOverAnd {
-  def distributeOrOverAnd(fol:FolExpression):FolExpression = FolContainer(fol).consolidate.toCNF.toFOLE
-}
-
-trait FixVariableNames {
-  def fixVariableNames(fix:(String => String))(fol:FolExpression):FolExpression = {
-    val fixV = fixVariableNames(fix)(_)
-    val rename = renameVariable(fix)(_, _)
-    fol match {
-      case FolIfExpression(first, second) => fixV(first) -> fixV(second)
-      case FolIffExpression(first, second) => fixV(first) <-> fixV(second)
-      //just keep searching
-      case FolAllExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).all(nVar)}
-      case FolExistsExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).exists(nVar)}
-      case FolAndExpression(first, second) => fixV(first) & fixV(second)
-      case FolEqualityExpression(first, second) => FolEqualityExpression(fixV(first), fixV(second))
-      case FolOrExpression(first, second) => fixV(first) | fixV(second)
-      case FolNegatedExpression(term) => -fixV(term)
-      case (varexp:FolVariableExpression) => varexp
-      //pretty sure these are useless
-      case FolLambdaExpression(variable, term) => FolLambdaExpression(variable, fixV(term))
-      case FolApplicationExpression(func, arg) => FolApplicationExpression(func, fixV(arg))
-    }
-  }
-  def renameVariable(fix:(String => String))(variable:Variable, term:FolExpression):(Variable, FolExpression) = {
-    val newVar = Variable(fix(variable.name))
-    (newVar, term.replace(variable, FolVariableExpression(newVar)))
+  def distributeOrOverAnd(fol:FolExpression):Option[FolExpression] = try {
+    Some(FolContainer(fol).consolidate.toCNF.toFOLE)
+  } catch {
+    case (t:Throwable) => println("failed to convert " + fol.toString + " to cnf"); None
   }
 }
 

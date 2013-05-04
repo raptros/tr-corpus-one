@@ -31,7 +31,7 @@ case class AndList(juncts:List[FolContainer]) extends FolJunction {
   def consolidate:FolContainer = {
     val newJuncts = juncts map (_ consolidate)
     val (pullIn, nj2) = newJuncts partition (_.isInstanceOf[AndList])
-    val nj3 = pullIn.asInstanceOf[List[AndList]].foldLeft(nj2) (_ ++ _.juncts)
+    val nj3 = pullIn.asInstanceOf[List[AndList]].map(_.juncts).flatten ++ nj2
     AndList(nj3)
   }
 
@@ -44,7 +44,7 @@ case class OrList(juncts:List[FolContainer]) extends FolJunction {
   def consolidate:FolContainer = {
     val newJuncts = juncts map (_ consolidate)
     val (pullIn, nj2) = newJuncts partition (_.isInstanceOf[OrList])
-    val nj3 = pullIn.asInstanceOf[List[OrList]].foldLeft(nj2) (_ ++ _.juncts)
+    val nj3 = pullIn.asInstanceOf[List[OrList]].map(_.juncts).flatten ++ nj2
     OrList(nj3)
   }
 
