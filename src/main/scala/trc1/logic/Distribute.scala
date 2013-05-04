@@ -1,6 +1,9 @@
 package trc1.logic
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
+import scalaz.syntax.std.function1._
+import scalaz.syntax.id._
+import collection.mutable.Buffer
 
 /**
  * List-based representation of predicate logic!
@@ -18,7 +21,11 @@ sealed abstract class FolContainer {
 
 /**basis for or and and lists*/
 abstract class FolJunction extends FolContainer {
-  def juncts:List[FolContainer]
+  def juncts:List[FolContainer] 
+  //type Shifting = (List[FolContainer], List[FolContainer])
+  //def shiftall:List[FolContainer] = {
+    
+  //def shift(p:Shifting):Shifting
 }
 
 case class AtomicExpression(exp:FolExpression) extends FolContainer {
@@ -82,6 +89,5 @@ object FolContainer {
     case (fj:FolJunction) => fj.juncts map (_.toFOLE.toString)
   }
 
-  
 
 }

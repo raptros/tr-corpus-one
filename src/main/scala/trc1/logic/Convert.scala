@@ -161,7 +161,8 @@ trait DistributeOrOverAnd {
   def distributeOrOverAnd(fol:FolExpression):Option[FolExpression] = try {
     Some(FolContainer(fol).consolidate.toCNF.toFOLE)
   } catch {
-    case (t:Throwable) => println("failed to convert " + fol.toString + " to cnf"); None
+    case (st:StackOverflowError) => {println("failed to convert " + fol.toString + " to cnf bc stack overflow"); None}
+    case (t:Throwable) => {println("failed to convert " + fol.toString + " to cnf"); None}
   }
 }
 
