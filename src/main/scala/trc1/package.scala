@@ -5,12 +5,16 @@ package object trc1 {
   import utcompling.scalalogic.fol.expression._
   import utcompling.scalalogic.top.expression.Variable
   import logic.{BoxerFOLParser, BoxerFolFormat}
+  import resolution.InferenceRuleFinal
+
   implicit def folExpression2BoxerFolFormat(fole:FolExpression):BoxerFolFormat = BoxerFolFormat(fole)
 
   implicit val ruleFmt:WireFormat[Rule] = mkCaseWireFormat(Rule, Rule.unapply _)
   implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
-  implicit val folPairFMT:WireFormat[FOLPair] = mkCaseWireFormat(FOLPair, FOLPair.unapply _)
+  //implicit val folPairFMT:WireFormat[FOLPair] = mkCaseWireFormat(FOLPair, FOLPair.unapply _)
   implicit val folRuleFmt:WireFormat[FolRule] = mkCaseWireFormat(FolRule, FolRule.unapply _)
+  implicit val irfFmt:WireFormat[InferenceRuleFinal] = mkCaseWireFormat(InferenceRuleFinal, InferenceRuleFinal.unapply _)
+  implicit val irfHolderFmt:WireFormat[IRFHolder] = mkCaseWireFormat(IRFHolder, IRFHolder.unapply _)
 
   /** wire format for FOLs based on the string format conversion*/
   implicit def folEFmt:WireFormat[FolExpression] = new WireFormat[FolExpression] {

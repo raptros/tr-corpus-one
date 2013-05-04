@@ -5,6 +5,7 @@ import scala.io.Source
 import logic.{ConvertToCNF,FolContainer}
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
+import resolution.{Resolution, InferenceRuleFinal, finalizeInference, compIRFs}
 
 /** MaxTransform is meant to implement the complete pipeline for converting the lexical rules into FOL.
   *
@@ -25,9 +26,13 @@ object MaxTransform extends ScoobiApp {
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
     val translated = applyRules(dRules, sentsByRule)// groupBy (_.orig)
-    //now create FOL pairs from the translated sentences
-    val folPairs = applyFOLExtractor(translated)
-    persist(toDelimitedTextFile(folPairs, outPath, mSep))
+    //now convert to fol and apply resolution to get rules
+    val infRules = applyFOLExtractor(translated)
+    //group the extracted rules and combine the groups
+    val combined = combineIRFHs(infRules)
+    //and save them
+    val strings = combined map (IRFHolders.toString(_))
+    persist(toTextFile(strings, outPath))
   }
   
   /** Finds all the rules that match each sentence.
@@ -64,25 +69,29 @@ object MaxTransform extends ScoobiApp {
   }
 
   /** converts sentences in the pairs into FOL formulae.*/
-  def applyFOLExtractor(translateds:DList[TranslatedSentence]):DList[FOLPair] = {
+  def applyFOLExtractor(translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
     translateds flatMap (ts2fp(_))
   }
 
   /** convert to FOL */
-  def ts2fp(ts:TranslatedSentence):Option[FOLPair] = for {
+  def ts2fp(ts:TranslatedSentence):Option[IRFHolder] = for {
     oFOL <- GetFOL(ts.orig)
     val oCNF = ConvertToCNF(oFOL)(_ + "1")
     val oLists = FolContainer.cnfToLists(oCNF)
     tFOL <- GetFOL(ts.trans)
     val tCNF = ConvertToCNF(-tFOL)(_ + "2")
     val tLists = FolContainer.cnfToLists(tCNF)
-  } yield FOLPair(ts.orig, ts.trans, 
-    fToString(oFOL, oCNF, oLists), 
-    fToString(tFOL, tCNF, tLists), 
-    ts.rule, ts.ruleId)
+    (fLeft, fRight) <- Resolution.resolveToFindDifference(oLists, tLists)
+  } yield RuleTypeChange.bringIRF(fLeft, ts.ruleId, ts.weight)
 
   def fToString(fol:Any, cnf:Any, lists:List[List[String]]):String = {
     /*fol.toString + mSep + cnf.toString + mSep +*/ (lists map (l => l map (s => "\"" + s +"\""))).toString
+  }
+
+  /** combines a dlist of irfhs into smallest */
+  def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = {
+    val grouped:DList[((String,String),Iterable[IRFHolder])] = irfhs.groupBy(irfh => (irfh.r.lhs.mkString("&"), irfh.r.rhs.mkString("&")))
+    grouped.combine(IRFHolders.combine(_:IRFHolder, _:IRFHolder)).values
   }
 }
 

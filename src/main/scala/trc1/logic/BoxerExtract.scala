@@ -45,6 +45,7 @@ object BoxerFOLParser extends JavaTokenParsers {
   def variable:Parser[Variable] = """\w+""".r ^^ {
     case v => Variable(v)
   }
+  def quickparse(l:String):FolExpression = parseAll(expr, l).get
 
   //utility functions
   def extractFol(line:String):Option[FolExpression] = try {
