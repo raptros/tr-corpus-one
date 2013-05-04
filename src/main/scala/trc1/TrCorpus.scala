@@ -77,10 +77,10 @@ object MaxTransform extends ScoobiApp {
   def ts2fp(ts:TranslatedSentence):Option[IRFHolder] = for {
     oFOL <- GetFOL(ts.orig)
     oCNF <- ConvertToCNF(oFOL)(_ + "1")
-    val oLists = FolContainer.cnfToLists(oCNF)
+    oLists <- try { Some(FolContainer.cnfToLists(oCNF)) } catch { case (t:Throwable) => {println("failed lists conv on " + ts.orig); None}}
     tFOL <- GetFOL(ts.trans)
     tCNF <- ConvertToCNF(-tFOL)(_ + "2")
-    val tLists = FolContainer.cnfToLists(tCNF)
+    tLists <- try { Some(FolContainer.cnfToLists(tCNF)) } catch { case (t:Throwable) => {println("failed lists conv on " + ts.trans); None}}
     (fLeft, fRight) <- Resolution.resolveToFindDifference(oLists, tLists)
   } yield RuleTypeChange.bringIRF(fLeft, ts.ruleId, ts.weight)
 
