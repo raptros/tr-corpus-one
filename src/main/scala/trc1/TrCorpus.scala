@@ -27,7 +27,7 @@ object MaxTransform extends ScoobiApp {
     //apply the rules to transform the sentences
     val translated = applyRules(dRules, sentsByRule)// groupBy (_.orig)
     //now convert to fol and apply resolution to get rules
-    val infRules = applyFOLExtractor(translated)
+    val infRules = getRules(translated)
     //group the extracted rules and combine the groups
     val combined = combineIRFHs(infRules)
     //and save them
@@ -68,18 +68,32 @@ object MaxTransform extends ScoobiApp {
     sents flatMap (applier(_))
   }
 
-  /** converts sentences in the pairs into FOL formulae.*/
-  def applyFOLExtractor(translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
-    translateds groupBy (_.orig) flatMap ((extractRules(_,_)).tupled)
+  /** converts sentences in the pairs into FOL formulae.*//*
+  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
+    val tGrouped = translateds groupBy (_.orig)
+    val leftTF = tGrouped flatMap {(convertLeft(_,_)).tupled}
+    val bothTF = leftTF flatMap (convertRight(_))
+    bothTF flatMap (extractRule(_))
+  }*/
+  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = for {
+    (orig, tss) <- translateds groupBy (_ orig)
+    lts <- convertLeft(orig, tss)
+    bts <- convertRight(lts)
+    rule <- extractRule(bts)
+  } yield rule
+
+  def convertLeft(orig:String, tss:Iterable[TranslatedSentence]):Iterable[LeftTransformedSentence] = for {
+    oTF <- getCNF(orig, "1").toIterable
+    TranslatedSentence(_, trans, _, id, weight) <- tss
+  } yield LeftTransformedSentence(oTF, trans, id, weight)
+
+  def convertRight(lts:LeftTransformedSentence):Option[BothTransformedSentence] = getCNF(lts.trans, "2", true) map { 
+    tTF => BothTransformedSentence(lts.orig, tTF, lts.ruleId, lts.weight)
   }
 
-  /** convert to FOL */
-  def extractRules(orig:String, tss:Iterable[TranslatedSentence]):Iterable[IRFHolder] = for {
-    oLists <- getCNF(orig, "1").toIterable
-    ts <- tss
-    tLists <- getCNF(ts.trans, "2", true)
-    (fLeft, fRight) <- Resolution.resolveToFindDifference(oLists, tLists)
-  } yield RuleTypeChange.bringIRF(fLeft, ts.ruleId, ts.weight)
+  def extractRule(bts:BothTransformedSentence):Option[IRFHolder] = Resolution.resolveToFindDifference(bts.orig, bts.trans) map {
+    case(fLeft, fRight) => RuleTypeChange.bringIRF(fLeft, bts.ruleId, bts.weight)
+  }
   
   def getCNF(sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
     fol <- GetFOL(sent)

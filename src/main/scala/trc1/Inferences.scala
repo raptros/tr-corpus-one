@@ -35,3 +35,7 @@ class RuleApplier(val rule:Rule) {
 /** represents a sentence that's been transformed by lexical rules.*/
 //case class TranslatedSentence(orig:String, trans:String, ruleId:Int)
 case class TranslatedSentence(orig:String, trans:String, rule:String, ruleId:Int, weight:Double)
+
+case class LeftTransformedSentence(orig:List[List[String]], trans:String, ruleId:Int, weight:Double)
+
+case class BothTransformedSentence(orig:List[List[String]], trans:List[List[String]], ruleId:Int, weight:Double)
