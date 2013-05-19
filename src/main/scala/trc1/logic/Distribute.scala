@@ -11,7 +11,7 @@ import collection.mutable.Buffer
  */
 sealed abstract class FolContainer {
   /** consolidate lists of junctions */
-  def consolidate:FolContainer
+  //def consolidate:FolContainer
   /** distribute disjunction over conjunction to complete CNF conversion*/
   def toCNF:FolContainer
   /**convert back to an FolExpression (handy)*/
@@ -34,25 +34,21 @@ case class AtomicExpression(exp:FolExpression) extends FolContainer {
   def toFOLE:FolExpression = exp
 }
 
-case class AndList(juncts:List[FolContainer]) extends FolJunction {
-  def consolidate:FolContainer = {
-    val newJuncts = juncts map (_ consolidate)
-    val (pullIn, nj2) = newJuncts partition (_.isInstanceOf[AndList])
-    val nj3 = pullIn.asInstanceOf[List[AndList]].map(_.juncts).flatten ++ nj2
-    AndList(nj3)
+case class AndList(jtemp:List[FolContainer]) extends FolJunction {
+  val juncts:List[FolContainer] = {
+    val (pullIn, nj2) = jtemp partition (_.isInstanceOf[AndList])
+    pullIn.asInstanceOf[List[AndList]].map(_.juncts).flatten ++ nj2
   }
 
-  def toCNF:FolContainer = AndList(juncts map (_.toCNF)).consolidate
+  def toCNF:FolContainer = AndList(juncts map (_.toCNF))
 
   def toFOLE:FolExpression = juncts map (_ toFOLE) reduceRight (_ & _)
 }
 
-case class OrList(juncts:List[FolContainer]) extends FolJunction {
-  def consolidate:FolContainer = {
-    val newJuncts = juncts map (_ consolidate)
-    val (pullIn, nj2) = newJuncts partition (_.isInstanceOf[OrList])
-    val nj3 = pullIn.asInstanceOf[List[OrList]].map(_.juncts).flatten ++ nj2
-    OrList(nj3)
+case class OrList(jtemp:List[FolContainer]) extends FolJunction {
+  val juncts:List[FolContainer] = {
+    val (pullIn, nj2) = jtemp partition (_.isInstanceOf[OrList])
+    pullIn.asInstanceOf[List[OrList]].map(_.juncts).flatten ++ nj2
   }
 
   def toCNF:FolContainer = {
@@ -64,8 +60,7 @@ case class OrList(juncts:List[FolContainer]) extends FolJunction {
       val mkOr = (container:FolContainer) => (OrList(container::toDist))
       AndList(conj.juncts map mkOr).toCNF
     } getOrElse {
-      //however if there are no conjunctions, just consolidate
-      consolidate
+      this //if there are no conjs this is already in cnf
     }
   }
 
@@ -78,7 +73,7 @@ object FolContainer {
     case FolOrExpression(first, second) => OrList(List(FolContainer(first), FolContainer(second)))
     case x => AtomicExpression(x)
   }
-  def cnfToLists(fol:FolExpression):List[List[String]] = apply(fol).consolidate match {
+  def cnfToLists(fol:FolExpression):List[List[String]] = apply(fol) match {
     case AtomicExpression(exp) => List(List(exp.toString))
     case AndList(juncts) => juncts map (cnfToListsInner(_))
     case OrList(juncts) => List(juncts map (_.toFOLE.toString))
