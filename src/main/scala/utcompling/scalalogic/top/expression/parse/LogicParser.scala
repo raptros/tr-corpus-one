@@ -76,7 +76,7 @@ abstract class LogicParser[T] {
             return this.attemptAdjuncts(accum, context)
         } catch {
             case e: ParseException => throw e
-            case e => throw new ParseException(Some(this.currentIndex), "Unparseable Input", e)
+            case (e:Throwable) => throw new ParseException(Some(this.currentIndex), "Unparseable Input", e)
         }
     }
 

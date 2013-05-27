@@ -65,7 +65,7 @@ object IRFHolders extends RuleHolders[InferenceRuleFinal, IRFHolder] {
   def getQuants(sQuants:String):Option[List[(String, Set[String])]] = {
     val broken = sQuants.split(':').toList
     val quants1 = broken map (getQuant(_))
-    if (quants1.exists(_ isEmpty)) None else Some(quants1.flatten)
+    if (quants1.exists(_.isEmpty)) None else Some(quants1.flatten)
   }
 
   def rToString(r:InferenceRuleFinal):String = r match {
@@ -74,7 +74,7 @@ object IRFHolders extends RuleHolders[InferenceRuleFinal, IRFHolder] {
   }
   def rFromString(l:String):Option[InferenceRuleFinal] = l.split('|') match {
     //one of those weird scalaz things here: ^(o1, o2, ...) ( (n1, n2, ..) => )
-    case Array(sQuants, sLhs, sRhs) => ^(getQuants(sQuants),Some(sLhs.split('&').toList),Some(sRhs.split('&').toList)) {
+    case Array(sQuants, sLhs, sRhs) => ^^(getQuants(sQuants),Some(sLhs.split('&').toList),Some(sRhs.split('&').toList)) {
       InferenceRuleFinal
     }
   }

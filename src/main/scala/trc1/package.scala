@@ -7,8 +7,6 @@ package object trc1 {
   import logic.{BoxerFOLParser, BoxerFolFormat}
   import resolution.InferenceRuleFinal
 
-  implicit def folExpression2BoxerFolFormat(fole:FolExpression):BoxerFolFormat = BoxerFolFormat(fole)
-
   implicit val ruleFmt:WireFormat[Rule] = mkCaseWireFormat(Rule, Rule.unapply _)
   implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
   implicit val leftTFFmt:WireFormat[LeftTransformedSentence] = mkCaseWireFormat(LeftTransformedSentence, LeftTransformedSentence.unapply _)
@@ -79,9 +77,9 @@ package object trc1 {
   def atWords(s:String):List[String] = {
     //split at word boundaries
     val splitted = (words split s) 
-    val filtered = splitted.tails.map(_ mkString) //then turn each tailing into a single string
+    val filtered = splitted.tails.map(_.mkString) //then turn each tailing into a single string
     .withFilter(!_.isEmpty).withFilter(_(0).isLetterOrDigit) //and filter out the ones that don't start at a word or are empty.
-    filtered toList
+    filtered.toList
   }
 
   def stripVar(str:String):String = swapRule.replaceAllIn(str, "")

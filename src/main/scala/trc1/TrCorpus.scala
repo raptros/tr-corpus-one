@@ -1,5 +1,6 @@
 package trc1
 import com.nicta.scoobi.Scoobi._
+import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
 import scala.io.Source
 import logic.{ConvertToCNF,FolContainer}
@@ -10,10 +11,9 @@ import resolution.{Resolution, InferenceRuleFinal, finalizeInference, compIRFs}
 /** MaxTransform is meant to implement the complete pipeline for converting the lexical rules into FOL.
   *
   */
-@EnhanceStrings
 object MaxTransform extends ScoobiApp {
   /** the task pipeline */
-  def run() = {
+  def run() {
     val rulesPath = args(0)
     val batchPath = args(1)
     val outPath = args(2)
@@ -21,7 +21,8 @@ object MaxTransform extends ScoobiApp {
     val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
     val dRuleCount:DObject[Int] = dRules.size
     //match sentences
-    val matched = matchSents(dRules, batchPath)
+    val sents = loadSents(batchPath)
+    val matched = matchSents(dRules, sents)
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
@@ -32,15 +33,16 @@ object MaxTransform extends ScoobiApp {
     val combined = combineIRFHs(infRules)
     //and save them
     val strings = combined map (IRFHolders.toString(_))
-    persist(toTextFile(strings, outPath))
+    strings.toTextFile(outPath).persist
   }
+
+  def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 32 }
   
   /** Finds all the rules that match each sentence.
    * See  trie code for why this stuff works.
    */
-  def matchSents(dRules:DList[Rule], sentsPath:String):DList[MatchedSentence] = {
-    val dtrie = dRules.map(r => (new RuleTrieC).addRule(r)).reduce(_+_)
-    val lines:DList[String] = fromTextFile(sentsPath)
+  def matchSents(dRules:DList[Rule], lines:DList[String]):DList[MatchedSentence] = {
+    val dtrie = dRules map (r => (new RuleTrieC).addRule(r)) reduce Reduction(_ + _)
     (dtrie join lines) map { 
       case (trie, line) => (line, trie.findAllRules(line.toLowerCase))
     }
@@ -48,16 +50,16 @@ object MaxTransform extends ScoobiApp {
 
   /**reorganize the matched sentences so that every rule has a list of matching sentences.*/
   def regroupMatched(matched:DList[MatchedSentence]):DList[(Int, List[String])] = {
-    val withRules:DList[(Int, String)] = matched flatMap {sPair => sPair._2 map (_ -> sPair._1)}
+    val withRules:DList[(Int, String)] = matched mapFlatten {sPair => sPair._2 map (_ -> sPair._1)}
     val grouped:DList[(Int, Iterable[(Int, String)])] = withRules groupBy (_._1)
-    grouped map {rPair => (rPair._1 -> rPair._2.map(_._2).toList)}
+    grouped map { rPair => (rPair._1 -> rPair._2.map(_._2).toList) }
   }
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
   def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[TranslatedSentence] = {
     val indexedRules:DList[(Int, Rule)] = dRules map (r => r.id -> r)
     val joint:DList[(Int, (Rule, List[String]))] = Relational.join(indexedRules, sents)
-    joint flatMap {
+    joint mapFlatten {
       case (id, (rule, sents)) => applySingleRule(rule, sents)
     }
   }
@@ -75,12 +77,15 @@ object MaxTransform extends ScoobiApp {
     val bothTF = leftTF flatMap (convertRight(_))
     bothTF flatMap (extractRule(_))
   }*/
-  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = for {
-    (orig, tss) <- translateds groupBy (_ orig)
+  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy (_.orig) mapFlatten convToRuleFunc
+  
+  def convertToRule(orig:String, tss:Iterable[TranslatedSentence]) = for {
     lts <- convertLeft(orig, tss)
     bts <- convertRight(lts)
     rule <- extractRule(bts)
   } yield rule
+
+  val convToRuleFunc = (convertToRule(_:String, _:Iterable[TranslatedSentence])).tupled
 
   def convertLeft(orig:String, tss:Iterable[TranslatedSentence]):Iterable[LeftTransformedSentence] = for {
     oTF <- getCNF(orig, "1").toIterable
@@ -108,18 +113,18 @@ object MaxTransform extends ScoobiApp {
   /** combines a dlist of irfhs into smallest */
   def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = {
     val grouped:DList[((String,String),Iterable[IRFHolder])] = irfhs.groupBy(irfh => (irfh.r.lhs.mkString("&"), irfh.r.rhs.mkString("&")))
-    grouped.combine(IRFHolders.combine(_:IRFHolder, _:IRFHolder)).values
+    grouped.combine(Reduction(IRFHolders.combine(_:IRFHolder, _:IRFHolder))).values
   }
 }
 
 object RemoveSingleContentWordTFRules extends ScoobiApp {
-  def run() = {
+  def run() {
     val stopsPath = args(0)
     val rulesPath = args(1)
     val folOutPath = args(2)
     val leftOutPath = args(3)
     //load up a set of stopwords
-    val stops:DObject[Set[String]] = fromTextFile(stopsPath) map (Set(_)) reduce (_++_)
+    val stops:DObject[Set[String]] = fromTextFile(stopsPath) map (Set(_)) reduce Reduction(_++_)
     //load rules into a dlist
     val dRules:DList[Rule]= fromTextFile(rulesPath) map (ruleFromString(_))
     //apply predicate to rules to break into two dlists
@@ -127,7 +132,7 @@ object RemoveSingleContentWordTFRules extends ScoobiApp {
     //convert the first one into a dlist of FOLs
     val fRules = scwtfs map (mkSCWTFFOL(_)) map (FolRules.toString(_))
     val leftStrings = leftovers map (ruleToString(_))
-    persist(toTextFile(fRules, folOutPath), toTextFile(leftStrings, leftOutPath))
+    persist(fRules.toTextFile(folOutPath), leftStrings.toTextFile(leftOutPath))
   }
 
   def breakRules(stops:DObject[Set[String]], dRules:DList[Rule]):(DList[Rule], DList[Rule]) = {
