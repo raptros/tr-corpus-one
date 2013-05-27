@@ -26,9 +26,9 @@ test_all() {
 }
 
 main() {
-    #echo "starting on each server"
-    #start_all
-    #sleep 20
+    echo "starting on each server"
+    start_all
+    sleep 20
     echo "testing"
     test_all
 }
