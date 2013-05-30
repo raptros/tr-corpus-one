@@ -37,8 +37,8 @@ trait FixVariableNames {
       case FolIfExpression(first, second) => fixV(first) -> fixV(second)
       case FolIffExpression(first, second) => fixV(first) <-> fixV(second)
       //just keep searching
-      case FolAllExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).all(nVar)}
-      case FolExistsExpression(variable, term) => rename(variable, term) match {case (nVar, nTerm) => fixV(nTerm).exists(nVar)}
+      case FolAllExpression(variable, term) => rename(variable, term) match { case (nVar, nTerm) => fixV(nTerm) all nVar }
+      case FolExistsExpression(variable, term) => rename(variable, term) match { case (nVar, nTerm) => fixV(nTerm) exists nVar }
       case FolAndExpression(first, second) => fixV(first) & fixV(second)
       case FolEqualityExpression(first, second) => FolEqualityExpression(fixV(first), fixV(second))
       case FolOrExpression(first, second) => fixV(first) | fixV(second)
@@ -46,7 +46,7 @@ trait FixVariableNames {
       case (varexp:FolVariableExpression) => varexp
       //pretty sure these are useless
       case FolLambdaExpression(variable, term) => FolLambdaExpression(variable, fixV(term))
-      case FolApplicationExpression(func, arg) => FolApplicationExpression(func, fixV(arg))
+      case FolApplicationExpression(func, arg) => func applyto fixV(arg)
     }
   }
   def renameVariable(fix:(String => String))(variable:Variable, term:FolExpression):(Variable, FolExpression) = {
@@ -132,11 +132,9 @@ trait Skolemize {
     case e:FolVariableExpression => e
   }
 
-  def constructFunc(existVar:Variable, varList:List[Variable]):FolExpression = {
-    val newExistVar = Variable(existVar.name.toLowerCase)
-    (newExistVar::varList).map(FolVariableExpression(_).asInstanceOf[FolExpression])
-    .reduceLeft {_ applyto _}
-  }
+  def constructFunc(existVar:Variable, varList:List[Variable]):FolExpression = (Variable(existVar.name.toLowerCase)::varList) map { 
+    FolVariableExpression(_).asInstanceOf[FolExpression] 
+  } reduceLeft { _ applyto _ }
 }
 
 /** drops universals. assumes everything above has been done

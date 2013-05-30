@@ -21,13 +21,13 @@ object RuleTypeChange {
   def bringIRF(ir:InferenceRule, id:Int, weight:Double):IRFHolder = IRFHolder(finalizeInference(ir), List(id), List(weight), 1)
 
   def mkFOLE(quantifiers:List[(String, Iterable[String])], lhs:List[String], rhs:List[String]):FolExpression = {
-    val conj = (side:List[String]) => side.map(v => flp.parse(v)).reduce(_ & _)
+    val conj = (side:List[String]) => side map { flp.parse _ } reduce { _ & _ }
     val quantify = (q:(String, Iterable[String]), e:FolExpression) => q match {
-      case ("exists", variables) => e.exists(variables map (Variable(_)))
-      case ("forall", variables) => e.all(variables map (Variable(_)))
+      case ("exists", variables) => e exists (variables map { Variable(_) })
+      case ("forall", variables) => e all (variables map { Variable(_) })
     }
-    val start = (conj(lhs)->conj(rhs)).asInstanceOf[FolExpression]
-    quantifiers.foldRight(start){ quantify }
+    val start = (conj(lhs) -> conj(rhs)).asInstanceOf[FolExpression]
+    (quantifiers foldRight start) { quantify }
   }
 
   def irfhToFol(irfh:IRFHolder):FolRule = irfh match { 
@@ -40,7 +40,7 @@ object RuleTypeChange {
   def mkIRF(fole:FolExpression):Option[InferenceRuleFinal] = None
 
   def folToIrfh(fr:FolRule):Option[IRFHolder] = fr match {
-    case FolRule(fole, rules, weights, count) => mkIRF(fole) map (IRFHolder(_, rules, weights, count))
+    case FolRule(fole, rules, weights, count) => mkIRF(fole) map { IRFHolder(_, rules, weights, count) }
   }
 }
 

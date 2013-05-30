@@ -30,19 +30,23 @@ package object trc1 {
   }
   //implicit val trieFmt:WireFormat[RuleTrieC] = mkCaseWireFormat(RuleTrieC, RuleTrieC.unapply _)
 
-  //implicit def TreeMapFmt[CC[X, Y] <: TreeMap[X, Y], K, V](implicit wtK: WireFormat[K], wtV: WireFormat[V], bf: CanBuildFrom[_, (K, V), CC[K, V]]):WireFormat[CC[K, V]] = new TraversableWireFormat(bf())
+  import collection.generic.CanBuildFrom
+
+  /*implicit def TreeMapFmt[CC[X, Y] <: TreeMap[X, Y], K, V](implicit wtK: WireFormat[K], wtV: WireFormat[V], bf: CanBuildFrom[_, (K, V),
+    CC[K, V]]):WireFormat[CC[K, V]] = new TraversableFmt(bf())*/
 
   /** creating a wireformat for a recursive data structure turns out to be less than straightforward.*/
   implicit def trieFmt:WireFormat[RuleTrieC] = new WireFormat[RuleTrieC] {
     def toWire(rtc:RuleTrieC, out:DataOutput) = {
-      TraversableFmt[List, Int].toWire(rtc.rulesHere, out)
-      MapFmt[TreeMap, Char, RuleTrieC].toWire(rtc.subs, out)
+      TraversableFmt[List, Int].write(rtc.rulesHere, out)
+      TraversableFmt[List, (Char, RuleTrieC)].write(rtc.subs.toList, out)
     }
 
     def fromWire(in:DataInput):RuleTrieC = {
-      val rulesHere = TraversableFmt[List, Int].fromWire(in)
-      val subs = MapFmt[TreeMap, Char, RuleTrieC].fromWire(in)
-      RuleTrieC(rulesHere, subs)
+      val rulesHere = TraversableFmt[List, Int].read(in)
+      val subsT = TraversableFmt[List, (Char, RuleTrieC)].read(in)
+      val subs = (subsT foldLeft TreeMap.empty[Char, RuleTrieC]) { _ + _ }
+      new RuleTrieC(rulesHere, subs)
     }
 
     def show(rtc:RuleTrieC):String = rtc.toString
@@ -59,9 +63,10 @@ package object trc1 {
 
   /**...*/
   def ruleFromString(line:String):Rule = {
-    val parts = line.split('\t')
+    val parts = (line split '\t')
     Rule(parts(0).toInt, parts(1), parts(2), parts(3).toDouble)
   }
+
   def ruleToString(rule:Rule):String = rule match {
     case Rule(id, lhs, rhs, weight) => List(id.toString, lhs, rhs, weight.toString).mkString("\t")
   }
@@ -73,14 +78,11 @@ package object trc1 {
   else array(char.intValue - CHARS_LOW)*/
   
   val words = """\b\b""".r
-  /**turns a sentence into a list of strings where each string starts with the word after the first word in the string before.*/
-  def atWords(s:String):List[String] = {
-    //split at word boundaries
-    val splitted = (words split s) 
-    val filtered = splitted.tails.map(_.mkString) //then turn each tailing into a single string
-    .withFilter(!_.isEmpty).withFilter(_(0).isLetterOrDigit) //and filter out the ones that don't start at a word or are empty.
-    filtered.toList
-  }
+  /**turns a sentence into an iterator over strings where each string starts with the word after the first word in the string before.*/
+   def atWords(s:String):Iterator[String] = for {
+     tail <- (words split s).tails  //split at word boundaries
+     ts = tail.mkString if (!ts.isEmpty && ts(0).isLetterOrDigit) //and filter out the ones that don't start at a word or are empty.
+   } yield ts
 
   def stripVar(str:String):String = swapRule.replaceAllIn(str, "")
 

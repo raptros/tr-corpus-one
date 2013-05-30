@@ -34,7 +34,7 @@ object BoxerFOLParser extends JavaTokenParsers {
     case e => -e
   }
   def funct = varExp ~ ("(" ~> rep1sep(varExp, ",") <~ ")") ^^ {
-    case name ~ vars => name::vars map(_.asInstanceOf[FolExpression]) reduceLeft(_ applyto _)
+    case name ~ vars => (name::vars) map { _.asInstanceOf[FolExpression] } reduceLeft { _ applyto _ }
   }
   def eq = "eq" ~> "(" ~> varExp ~ ("," ~> varExp) <~ ")" ^^ {
     case v1 ~ v2 => FolEqualityExpression(v1,v2)
@@ -58,6 +58,7 @@ object BoxerFOLParser extends JavaTokenParsers {
     case (_:Throwable) => None
   }
 
-  def findFol(lines:Seq[String]):Option[FolExpression] = (lines flatMap(extractFol(_))).headOption
+  import scala.language.postfixOps
+  def findFol(lines:Seq[String]):Option[FolExpression] = lines flatMap { extractFol(_) } headOption
 }
 

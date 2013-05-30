@@ -22,13 +22,14 @@ class RuleApplier(val rule:Rule) {
   val rhss = stripVar(rhs)
   
   /** applies this rule to a sentence producing a TranslatedSentence */
-  def apply(orig:String):Option[TranslatedSentence] = (lhsRE findFirstMatchIn orig) map { m =>
-    if (swap) {
+  def apply(orig:String):Option[TranslatedSentence] = for {
+    m <- (lhsRE findFirstMatchIn orig)
+    m2 = if (swap) {
       (m group "y") + rhss + (m group "x")
     } else {
       (m group "x") + rhss + (m group "y")
     }
-  } map (TranslatedSentence(orig, _, lhs + "->" + rhs, id, weight))
+  } yield TranslatedSentence(orig, m2, lhs + "->" + rhs, id, weight)
 
 }
 
