@@ -7,7 +7,9 @@ object TaccHadoopBuild extends Build {
     exportJars := true
   ) ++ Defaults.defaultSettings
 
-  lazy val main = Project("tr-corpus-one", file("."))
+  lazy val main = Project("tacc-hadoop", file(".")) dependsOn(scoobi)
+
+  lazy val scoobi = Project("scoobi", file("scoobi"))
 
 }
 

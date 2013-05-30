@@ -78,8 +78,8 @@ object IRFHolders extends RuleHolders[InferenceRuleFinal, IRFHolder] {
       (lhs mkString "&"), (rhs mkString "&")) mkString "|"
   }
   def rFromString(l:String):Option[InferenceRuleFinal] = (l split '|') match {
-    //one of those weird scalaz things here: ^^(o1, o2, o3) ( (n1, n2, n3) => something )
-    case Array(sQuants, sLhs, sRhs) => ^^(getQuants(sQuants), Some((sLhs split '&').toList), Some((sRhs split '&').toList)) {
+    //one of those weird scalaz things here: ^(o1, o2, o3) ( (n1, n2, n3) => something )
+    case Array(sQuants, sLhs, sRhs) => ^(getQuants(sQuants), Some((sLhs split '&').toList), Some((sRhs split '&').toList)) {
       InferenceRuleFinal
     }
   }

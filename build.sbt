@@ -8,9 +8,9 @@ name := "tr-corpus-one"
 
 version := "0.1"
 
-scalaVersion := "2.10.1"
+scalaVersion := "2.9.2"
 
-libraryDependencies += "com.nicta" %% "scoobi" % "0.7.0-RC1-cdh3"
+libraryDependencies += "com.nicta" %% "scoobi" % "0.6.0-cdh3"
 
 resolvers ++= Seq(
   "Sonatype-snapshots" at "http://oss.sonatype.org/content/repositories/snapshots",
@@ -26,9 +26,13 @@ libraryDependencies ++= Seq(
   "commons-lang" % "commons-lang" % "2.6"
 )
 
-libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.0.0"
+resolvers += "Virtual-Void repository" at "http://mvn.virtual-void.net"
 
-scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature")
+addCompilerPlugin("net.virtualvoid" % "scala-enhanced-strings_2.9.1" % "0.5.2")
+
+libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.0.0-M3"
+
+scalacOptions ++= Seq("-deprecation", "-unchecked")
 
 jarName in assembly := "tacc-hadoop-assembly.jar"
 

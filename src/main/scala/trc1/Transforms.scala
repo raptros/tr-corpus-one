@@ -8,8 +8,6 @@ import scalaz.std.option._
 import scalaz.syntax.apply._
 import scalaz.syntax.std.option._
 
-import scala.language.postfixOps
-
 /** case class representing a pair of sentence versions in FOL. */
 //case class FOLPair(fol1:String, fol2:String, id:Int)
 //case class FOLPair(orig:String, translated:String, fol1:String, fol2:String, rule:String, id:Int)
@@ -46,12 +44,13 @@ object RuleTypeChange {
 
 
 /** calls c and c and then boxer to get fol expressions*/
+@EnhanceStrings
 object GetFOL {
 
   //val candcBase = "/home/02297/coynea90/install/candc"
   val candcBase = "/home/aidan/Install/candc"
-  val soapClient = s"${candcBase}/bin/soap_client --url http://localhost:9000"
-  val boxer = s"${candcBase}/bin/boxer --stdin --box false --semantics fol --flat false --resolve true --elimeq true --format prolog --instantiate true"
+  val soapClient = "#{candcBase}/bin/soap_client --url http://localhost:9000"
+  val boxer = "#{candcBase}/bin/boxer --stdin --box false --semantics fol --flat false --resolve true --elimeq true --format prolog --instantiate true"
 
   def apply(sentence:String):Option[FolExpression] = {
       val echo = "echo " + sentence

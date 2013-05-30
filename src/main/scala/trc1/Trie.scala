@@ -39,7 +39,6 @@ class RuleTrieC(val rulesHere:List[Int], val subs:TreeMap[Char, RuleTrieC]) {
     addRuleMap(stripVar(rule.lhs), rule.id)
   }
 
-    import scala.language.postfixOps
   /** finds rules for every suffix of the input sentence.
     * @param sentence a string, processed to be in the same format as the rules.
     * @return a list of rule identifiers.

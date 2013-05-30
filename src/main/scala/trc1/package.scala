@@ -6,6 +6,8 @@ package object trc1 {
   import utcompling.scalalogic.top.expression.Variable
   import logic.{BoxerFOLParser, BoxerFolFormat}
   import resolution.InferenceRuleFinal
+  
+  implicit def folExpression2BoxerFolFormat(fole:FolExpression):BoxerFolFormat = new BoxerFolFormat(fole)
 
   implicit val ruleFmt:WireFormat[Rule] = mkCaseWireFormat(Rule, Rule.unapply _)
   implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
@@ -30,7 +32,6 @@ package object trc1 {
   }
   //implicit val trieFmt:WireFormat[RuleTrieC] = mkCaseWireFormat(RuleTrieC, RuleTrieC.unapply _)
 
-  import collection.generic.CanBuildFrom
 
   /*implicit def TreeMapFmt[CC[X, Y] <: TreeMap[X, Y], K, V](implicit wtK: WireFormat[K], wtV: WireFormat[V], bf: CanBuildFrom[_, (K, V),
     CC[K, V]]):WireFormat[CC[K, V]] = new TraversableFmt(bf())*/
@@ -38,13 +39,13 @@ package object trc1 {
   /** creating a wireformat for a recursive data structure turns out to be less than straightforward.*/
   implicit def trieFmt:WireFormat[RuleTrieC] = new WireFormat[RuleTrieC] {
     def toWire(rtc:RuleTrieC, out:DataOutput) = {
-      TraversableFmt[List, Int].write(rtc.rulesHere, out)
-      TraversableFmt[List, (Char, RuleTrieC)].write(rtc.subs.toList, out)
+      TraversableFmt[List, Int].toWire(rtc.rulesHere, out)
+      MapFmt[TreeMap, Char, RuleTrieC].toWire(rtc.subs, out)
     }
 
     def fromWire(in:DataInput):RuleTrieC = {
-      val rulesHere = TraversableFmt[List, Int].read(in)
-      val subsT = TraversableFmt[List, (Char, RuleTrieC)].read(in)
+      val rulesHere = TraversableFmt[List, Int].fromWire(in)
+      val subsT = MapFmt[TreeMap, Char, RuleTrieC].fromWire(in)
       val subs = (subsT foldLeft TreeMap.empty[Char, RuleTrieC]) { _ + _ }
       new RuleTrieC(rulesHere, subs)
     }

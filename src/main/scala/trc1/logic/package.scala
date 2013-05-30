@@ -4,7 +4,7 @@ package object logic {
   import utcompling.scalalogic.fol.expression._
   import utcompling.scalalogic.top.expression.Variable
 
-  implicit class BoxerFolFormat(exp:FolExpression) {
+  class BoxerFolFormat(exp:FolExpression) {
     //yes
     def toBoxerFolFormat(id:String):String = formatVariable("fol", Variable(id), exp) + "."
 

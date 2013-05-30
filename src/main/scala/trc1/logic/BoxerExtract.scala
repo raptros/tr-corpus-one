@@ -58,7 +58,6 @@ object BoxerFOLParser extends JavaTokenParsers {
     case (_:Throwable) => None
   }
 
-  import scala.language.postfixOps
   def findFol(lines:Seq[String]):Option[FolExpression] = lines flatMap { extractFol(_) } headOption
 }
 
