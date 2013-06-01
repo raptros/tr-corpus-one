@@ -5,8 +5,25 @@ import scala.collection._
 import scala.util.matching.Regex
 import scala.util.control.Exception._
 
-class TestTakeLiteralApart extends TakeLiteralApart {
-  def testme :Unit = {
+object RunTests extends App {
+  val tests = List(
+    //new TestTakeLiteralApart,
+    //new TestVariableFindAndReplace,
+    new TestClause,
+    new TestCNF,
+    new TestInferenceRule,
+    new ResolutionTest
+  )
+
+  tests foreach { _.testme }
+}
+
+trait TestMe {
+  def testme:Unit
+}
+
+class TestTakeLiteralApart extends TakeLiteralApart with TestMe {
+  def testme {
     List("p(f(a), g(g(X)), Y)", "p", "q(f(a, b), X, Y,   f(X, Y))").foreach { literal =>
       println("Taking apart " + literal + " : ")
       val (pred, args) = separatePredArg(literal)
@@ -21,8 +38,8 @@ class TestTakeLiteralApart extends TakeLiteralApart {
   }
 }
 
-class TestVariableFindAndReplace extends VariableFindAndReplace {
-  def testme :Unit = {
+class TestVariableFindAndReplace extends VariableFindAndReplace with TestMe {
+  def testme {
     println("testing isVariable on X:" + isVariable("X"))
     println("testing isVariable on p(X):" + isVariable("p(X)"))
     println("testing isVariable on aX:" + isVariable("aX"))
@@ -46,8 +63,8 @@ class TestVariableFindAndReplace extends VariableFindAndReplace {
   }
 }
 
-class TestUnification extends Unification {
-  def testme :Unit = {
+class TestUnification extends Unification with TestMe {
+  def testme = {
     val subs = addSubstitution("X", "a", newSubstitution)
     println("testing addSubstitution: adding X->a to an empty substitution : "+  subs)
     val subs2 = addSubstitution("Y", "Z", subs)
@@ -67,11 +84,11 @@ class TestUnification extends Unification {
   }
 }
 
-class TestLiteral {
-  def testme :Unit = { 
+class TestLiteral extends TestMe {
+  def testme { 
     val litlist = List("p(a, f(X), g(g(g(Y,X))))", "-X", "-g(Y)")
     litlist.foreach { ls =>
-      val l = new Literal(ls)
+      val l = Literal(ls)
       println("posLiteral, isNegated, predicate for " + ls + " : " + l.posLiteralString + " " + l.isNegated + 
 	      " " + l.predSymbol)
       l.argList.foreach (a => println("argument " + a))
@@ -85,8 +102,8 @@ class TestLiteral {
 			("p(a, b, c)", "-p(  a,b,   c )"), ("X", "-X"), ("p(X, Y)", "-p(Y, Z)"))
 
     litpairs.foreach { case (l1, l2) =>
-		       val l1L = new Literal(l1)
-		       val l2L = new Literal(l2)
+		       val l1L = Literal(l1)
+		       val l2L = Literal(l2)
 		       println("Comparing: " + l1L.toString + " || " + l2L.toString)
 		       println("possible match: " + l1L.possibleMatch(l2L))
 		       println("unifiableAndNegated: " + l1L.unifiableAndNegated(l2L))
@@ -95,24 +112,25 @@ class TestLiteral {
 		     }
     
     println
-    var l1 = new Literal("p(X, g(g(Y)), ZZ, f(Z))")
+    var l1 = Literal("p(X, g(g(Y)), ZZ, f(Z))")
     val subst = newSubstitutionInit("X"->"a", "Y"->"b", "Z"->"c")
     println("applying substitution to " + l1 + " : " + subst)
-    l1.applySubstitution(subst)
-    println("result: " + l1)
+    val l1p = l1.applySubstitution(subst)
+    println("result: " + l1p)
 
     println
-    val l2 = new Literal("-p(f(a, b, c, g(g(X))))")
+    val l2 = Literal("-p(f(a, b, c, g(g(X))))")
     println("is -p(f(a, b, c, g(g(X)))) grounded? " + l2.isGrounded)
-    l2.applySubstitution(newSubstitutionInit("X"->"f(c)"))
-    println("after applying substitution X->f(c) : " + l2.isGrounded)
-    println("is -a grounded? " + new Literal("-a").isGrounded)
-    println("is -X grounded? " + new Literal("-X").isGrounded)
+    val l2p = l2.applySubstitution(newSubstitutionInit("X"->"f(c)"))
+    println("after applying substitution X->f(c) : " + l2p.isGrounded)
+    println("is -a grounded? " + Literal("-a").isGrounded)
+    println("is -X grounded? " + Literal("-X").isGrounded)
   }
 }
 
-class TestClause {
-  def testme :Unit =  {
+class TestClause extends TestMe {
+  def testme {
+    println("test clause")
     val litlist = List("p(a)", "-p(a)", "p(a,a)", "p(a)")
     var cl1 = new Clause(litlist)
     println("clause from literal list " + litlist)
@@ -126,7 +144,7 @@ class TestClause {
     val litlist2 = List("p(a)", "p(X)")
     var cl2 = new Clause(litlist2)
     println(cl2)
-    cl2.applySubstitution(newSubstitutionInit("X"->"a"))
+    cl2 = cl2.applySubstitution(newSubstitutionInit("X"->"a"))
     println(cl2)
 
     val litlist3 = List("p(a)", "-p(X)")
@@ -144,39 +162,42 @@ class TestClause {
 
 }
 
-class TestCNF {
-  def testme :Unit = {
+class TestCNF extends TestMe {
+  def testme {
+    println
+    println("test cnf")
+    println
     val cnfList1 = List(List("-q(a)"), List("p(a)", "p(X)"), List("p(a)", "-p(a)", "p(g(X))"))
-    val cnf1 = new CNF(cnfList1)
+    var cnf1 = new CNF(cnfList1)
     println(cnf1)
     println("clause indices " + cnf1.clauseIndices)
     println("doing ResolveAsSingleton on 0 with substitution X->b")
-    cnf1.resolveAsSingleton(0, newSubstitutionInit("X" -> "b"))
+    cnf1 = cnf1.resolveAsSingleton(0, newSubstitutionInit("X" -> "b"))
     println(cnf1)
     println("trying ResolveAsSingleton with nonexistent clause")
     try {
-      cnf1.resolveAsSingleton(3, newSubstitution)
+      cnf1 = cnf1.resolveAsSingleton(3, newSubstitution)
     } catch {
       case e: Exception => println("caught an exception")
     }
 
     println("clause indices " + cnf1.clauseIndices)
     println("doing ResolveWithSingleton on 1 with empty substitution")
-    cnf1.resolveWithSingleton(1, new Literal("p(b)"), newSubstitution)
+    cnf1 = cnf1.resolveWithSingleton(1, Literal("p(b)"), newSubstitution)
     println(cnf1)
     println("doing ResolveWithSingleton with nonexistent literal")
     try {
-      cnf1.resolveWithSingleton(1, new Literal("d"), newSubstitution)
+      cnf1 = cnf1.resolveWithSingleton(1, Literal("d"), newSubstitution)
     } catch {
       case e:Exception => println("caught an exception")
     }
     println
 
     val cnfList2 = List(List("p(a)", "p(X)"))
-    val cnf2 = new CNF(cnfList2)
+    var cnf2 = new CNF(cnfList2)
     println(cnf2)
     println("applying substitution: X->a")
-    cnf2.applySubstitution(newSubstitutionInit("X"->"a"))
+    cnf2 = cnf2.applySubstitution(newSubstitutionInit("X"->"a"))
     println(cnf2)
     println
 
@@ -184,28 +205,29 @@ class TestCNF {
     println
 
     val cnfList3 = List(List("p(f(X))", "-q(Y)"), List("p(a, a)", "-q(Z)"))
-    val cnf3 = new CNF(cnfList3)
+    var cnf3 = new CNF(cnfList3)
     println(cnf3)
     println("applying substitution: X->Z, Y->c")
-    cnf3.applySubstitution(newSubstitutionInit("X" -> "Z", "Y"->"c"))
+    cnf3 = cnf3.applySubstitution(newSubstitutionInit("X" -> "Z", "Y"->"c"))
     println(cnf3)
     println
 
     // uniqueUnificationMatch
-    println("uniqueUnificationMatch for q(X): " + cnf3.uniqueUnificationMatch(new Literal("q(X)")))
-    println("uniqueUnificationMatch for q(a): " + cnf3.uniqueUnificationMatch(new Literal("q(a)")))
+    println("uniqueUnificationMatch for q(X): " + cnf3.uniqueUnificationMatch(Literal("q(X)")))
+    println("uniqueUnificationMatch for q(a): " + cnf3.uniqueUnificationMatch(Literal("q(a)")))
 
     println(cnf3.toListList)
 
     println
-    println("grounded negation match for q(X) in cnf3: " + cnf3.groundedNegationMatch(new Literal("q(X)")))
-    println("grounded negation match for p(a, a) in cnf3: " + cnf3.groundedNegationMatch(new Literal("p(a,a)")))
-    println("grounded negation match for -p(a,a) in cnf3: " + cnf3.groundedNegationMatch(new Literal("-p( a,   a)")))
+    println("grounded negation match for q(X) in cnf3: " + cnf3.groundedNegationMatch(Literal("q(X)")))
+    println("grounded negation match for p(a, a) in cnf3: " + cnf3.groundedNegationMatch(Literal("p(a,a)")))
+    println("grounded negation match for -p(a,a) in cnf3: " + cnf3.groundedNegationMatch(Literal("-p( a,   a)")))
   }
 }
 
-class TestInferenceRule { 
-  def testme :Unit = {
+class TestInferenceRule extends TestMe { 
+  def testme {
+    println("inference rule test")
     val cnf1 = new CNF(List(List("p(a)"), List("q(b)"), List("-p(a)"), List("r(b, b)")))
     val cnf2 = new CNF(List(List("q(a)"), List("-o(b)"), List("p(X)"), List("p(Y)"), List("r(X)")))
 
@@ -240,9 +262,10 @@ class TestInferenceRule {
   }
 }
 
-class ResolutionTest {
+class ResolutionTest extends TestMe {
   import Resolution._
-  def testme :Unit = { 
+  def testme { 
+    println("resolution test")
     testThisPair(List(List("solve(a)"), List("event(a)"), List("agent(a, b)"), List("person(b)"), 
 		      List("patient(a, c)"), List("problem(c)")),
 		 List(List("-find(E)", "-event(E)", "-agent(E, X)", "-person(X)", 
@@ -345,5 +368,6 @@ List(List("nam1serbsC44(a1)"), List("n1areasC44(b1)"), List("a1safe(b1)"), List(
     testThisPair(f1, f2)
   }
 }
+
 
 

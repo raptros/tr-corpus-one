@@ -9,27 +9,23 @@ import scala.util.control.Exception._
 // keeps a disjunction of literals as a set.
 class Clause(literals1:Set[Literal]) {
 
+  def this(stringlist:List[String]) = this(stringlist.toSet map { (s:String) => Literal(s) })
+  
   val literals = literals1 filterNot { l =>
     literals1 exists { _ isNegationOf l }
-  } toSet
+  }
+
+  val size = literals.size
+  val isSingleton = size == 1 
+  val isEmpty = size == 0 
 
   if (isEmpty) throw new EmptyClauseException(toString)
 
-  def this(stringlist:List[String]) = this(stringlist map { Literal(_) } toSet)
-
-  // size of the clause: the number of its literals
-  def size = literals.size
-
-  // tests for singleton and empty clauses
-  def isSingleton = size == 1 
-  def isEmpty = size == 0 
-
   def applySubstitution(substitution:Substitution):Clause = 
     new Clause(literals map { _ applySubstitution substitution })
-  
 
   // for inspection: represent this class as the list of literals
-  override def toString:String = { "Clause(" + this.literals.toString + ")"}
+  override def toString:String = s"Clause(${literals})"
 
   def toList = literals.toList map { _.toString }
 }

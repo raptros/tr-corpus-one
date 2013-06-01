@@ -8,9 +8,7 @@ import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
 import resolution.{Resolution, InferenceRuleFinal, finalizeInference, compIRFs}
 
-/** MaxTransform is meant to implement the complete pipeline for converting the lexical rules into FOL.
-  *
-  */
+/** MaxTransform implements the complete pipeline for converting the lexical rules into FOL. */
 object MaxTransform extends ScoobiApp {
   /** the task pipeline */
   def run() {
@@ -19,14 +17,13 @@ object MaxTransform extends ScoobiApp {
     val outPath = args(2)
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
-    val dRuleCount:DObject[Int] = dRules.size
     //match sentences
     val sents = loadSents(batchPath)
     val matched = matchSents(dRules, sents)
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
-    val translated = applyRules(dRules, sentsByRule)// groupBy (_.orig)
+    val translated = applyRules(dRules, sentsByRule)
     //now convert to fol and apply resolution to get rules
     val infRules = getRules(translated)
     //group the extracted rules and combine the groups
@@ -36,22 +33,19 @@ object MaxTransform extends ScoobiApp {
     strings.toTextFile(outPath).persist
   }
 
-  def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) //filter { l => l.split(' ').length < 50 }
+  def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 50 }
   
-  /** Finds all the rules that match each sentence.
-   * See  trie code for why this stuff works.
-   */
-  def matchSents(dRules:DList[Rule], lines:DList[String]):DList[MatchedSentence] = {
+  /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
+  def matchSents(dRules:DList[Rule], lines:DList[String]):DList[(String, List[Int])] = {
     val dtrie = dRules map { (new RuleTrieC).addRule(_) } reduce { Reduction(_ + _) }
     for { (trie, line) <- dtrie join lines } yield line -> (trie findAllRules line.toLowerCase)
   }
 
-  /**reorganize the matched sentences so that every rule has a list of matching sentences.*/
-  def regroupMatched(matched:DList[MatchedSentence]):DList[(Int, List[String])] = {
-    import scala.language.postfixOps
+  /** reorganize the matched sentences so that every rule has a list of matching sentences.*/
+  def regroupMatched(matched:DList[(String, List[Int])]):DList[(Int, List[String])] = {
     val withRules:DList[(Int, String)] = matched mapFlatten { sPair => sPair._2 map { _ -> sPair._1 } }
     val grouped:DList[(Int, Iterable[(Int, String)])] = withRules groupBy { _._1 }
-    grouped map { rPair => rPair._1 -> (rPair._2 map { _._2 } toList) }
+    grouped map { rPair => rPair._1 -> (rPair._2.toList map { _._2 }) }
   }
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
@@ -69,32 +63,28 @@ object MaxTransform extends ScoobiApp {
     sents flatMap { applier(_) }
   }
 
-  /** converts sentences in the pairs into FOL formulae.*//*
-  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
-    val tGrouped = translateds groupBy (_.orig)
-    val leftTF = tGrouped flatMap {(convertLeft(_,_)).tupled}
-    val bothTF = leftTF flatMap (convertRight(_))
-    bothTF flatMap (extractRule(_))
+  /** extracts rules from the sentence pairs */
+  /*def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy { _.orig } mapFlatten { 
+    case (o, tss) => convertToRule(o, tss)
   }*/
-  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy { _.orig } mapFlatten convToRuleFunc
+
+  /** extracts rules from the sentence pairs */
+  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy { _.orig } mapFlatten { 
+    case (o, tss) => convertLeft(o, tss)
+  } mapFlatten { convertRight(_) } mapFlatten { extractRule(_) }
   
-  def convertToRule(orig:String, tss:Iterable[TranslatedSentence]) = for {
-    lts <- convertLeft(orig, tss)
-    bts <- convertRight(lts)
-    rule <- extractRule(bts)
-  } yield rule
-
-  val convToRuleFunc = (convertToRule(_:String, _:Iterable[TranslatedSentence])).tupled
-
+  /** converts the original sentence into CNF/list-of-list form and flatmaps it over the translated versions */
   def convertLeft(orig:String, tss:Iterable[TranslatedSentence]):Iterable[LeftTransformedSentence] = for {
     oTF <- getCNF(orig, "1").toIterable
     TranslatedSentence(_, trans, _, id, weight) <- tss
   } yield LeftTransformedSentence(oTF, trans, id, weight)
 
+  /** converts the translated sentence to CNF, list-of-list form */
   def convertRight(lts:LeftTransformedSentence):Option[BothTransformedSentence] = for {
     tTF <- getCNF(lts.trans, "2", true) 
   } yield BothTransformedSentence(lts.orig, tTF, lts.ruleId, lts.weight)
 
+  /** extracts a rule from the cnf sentence pairs using the resolution module */
   def extractRule(bts:BothTransformedSentence):Option[IRFHolder] = for {
     (fLeft, _) <- Resolution.resolveToFindDifference(bts.orig, bts.trans) 
   } yield RuleTypeChange.bringIRF(fLeft, bts.ruleId, bts.weight)
@@ -102,13 +92,16 @@ object MaxTransform extends ScoobiApp {
   import scalaz.Validation._
   import scala.language.postfixOps
   
+  /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
   def getCNF(sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
     fol <- GetFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
     lists <- fromTryCatch { FolContainer.cnfToLists(cnf) } leftMap { (t:Throwable) => println("failed lists conv on " + sent); t } toOption
   } yield lists
 
-  /** combines a dlist of irfhs into smallest */
+  /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
+    * up the generation counts
+    */
   def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = irfhs groupBy { irfh =>
     (irfh.r.lhs mkString "&") -> (irfh.r.rhs mkString "&")
   } combine { 
@@ -116,7 +109,14 @@ object MaxTransform extends ScoobiApp {
   } values
 }
 
+/** preproccesses rules by seperating ones that convert between single content words from more complex rules */
 object RemoveSingleContentWordTFRules extends ScoobiApp {
+  /** expects 4 args 
+    * @param stopsPath an input file with a single stopword on each line
+    * @param rulesPath an input file containing rules in the proper format
+    * @param folOutPath the ouput path for the single-content-word rules in FOL format
+    * @param leftOutPath the output path for the rules not removed by this tool
+    */
   def run() {
     val stopsPath = args(0)
     val rulesPath = args(1)
@@ -134,18 +134,25 @@ object RemoveSingleContentWordTFRules extends ScoobiApp {
     persist(fRules.toTextFile(folOutPath), leftStrings.toTextFile(leftOutPath))
   }
 
+  /** Returns a pair of rule sets by splitting them on the isSCWTFRule predicate. */
   def breakRules(stops:DObject[Set[String]], dRules:DList[Rule]):(DList[Rule], DList[Rule]) = {
     val (in, out) = (stops join dRules) partition { (isSCWTFRule(_,_)).tupled }
     (in map { _._2 }, out map { _._2 })
   }
+  
+  /** Determines if a string contains only a single content word. */
   def isSingleContentWord(stops:Set[String], side:String):Boolean = ((side split ' ').length == 1) && !(stops contains stripVar(side))
+
+  /** Determines if both sides of a rule only contain single content words. */
   def isSCWTFRule(stops:Set[String], rule:Rule):Boolean = isSingleContentWord(stops, rule.lhs) && isSingleContentWord(stops, rule.rhs)
 
+  /** Converts a single-content-word string into an FOL expression */
   def prepSide(side:String):FolExpression = {
     val cleaned = stripVar(side).replace("-", "C45").trim
     FolVariableExpression(Variable(cleaned))
   }
 
+  /** converts a single-content-word Rule into an FOL rule */
   def mkSCWTFFOL(rule:Rule):FolRule = {
     val v = Variable("X")
     val fve = FolVariableExpression(v)

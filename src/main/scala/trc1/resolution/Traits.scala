@@ -101,6 +101,7 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
   }
 
   def unifyTerms(t1O:String,t2O:String, substitution:Substitution):Option[Substitution] = {
+    import scala.language.postfixOps
     val t1:String = applySubstitution(t1O, substitution)
     val t2:String = applySubstitution(t2O, substitution)
     

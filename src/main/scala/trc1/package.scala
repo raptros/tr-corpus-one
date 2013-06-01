@@ -39,13 +39,12 @@ package object trc1 {
   implicit def trieFmt:WireFormat[RuleTrieC] = new WireFormat[RuleTrieC] {
     def toWire(rtc:RuleTrieC, out:DataOutput) = {
       TraversableFmt[List, Int].write(rtc.rulesHere, out)
-      TraversableFmt[List, (Char, RuleTrieC)].write(rtc.subs.toList, out)
+      MapFmt[TreeMap, Char, RuleTrieC].write(rtc.subs, out)
     }
 
     def fromWire(in:DataInput):RuleTrieC = {
       val rulesHere = TraversableFmt[List, Int].read(in)
-      val subsT = TraversableFmt[List, (Char, RuleTrieC)].read(in)
-      val subs = (subsT foldLeft TreeMap.empty[Char, RuleTrieC]) { _ + _ }
+      val subs = MapFmt[TreeMap, Char, RuleTrieC].read(in)
       new RuleTrieC(rulesHere, subs)
     }
 
@@ -57,10 +56,6 @@ package object trc1 {
   val swapRule = "@R@".r
   val ruleExtract = new Regex("^([^@]*)(@R@)?", "rule", "r")
   
-
-  //implicit val matchedSentFmt:WireFormat[MatchedSentence] = mkCaseWireFormat(MatchedSentence, MatchedSentence.unapply _)
-  type MatchedSentence = (String, List[Int])
-
   /**...*/
   def ruleFromString(line:String):Rule = {
     val parts = (line split '\t')
