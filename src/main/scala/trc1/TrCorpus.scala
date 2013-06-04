@@ -7,6 +7,8 @@ import logic.{ConvertToCNF,FolContainer}
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
 import resolution.{Resolution, InferenceRuleFinal, finalizeInference, compIRFs}
+import scala.util.Properties
+import scalaz.syntax.std.option._
 
 /** MaxTransform implements the complete pipeline for converting the lexical rules into FOL. */
 object MaxTransform extends ScoobiApp {
@@ -16,7 +18,8 @@ object MaxTransform extends ScoobiApp {
     val batchPath = args(1)
     val outPath = args(2)
     //check that GetFOL will be able to run.
-    GetFOL.checkPaths()
+    val candcBasePath = Properties.envOrNone("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!")
+    (new GetFOL(candcBasePath)).checkPaths()
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences
@@ -27,7 +30,7 @@ object MaxTransform extends ScoobiApp {
     //apply the rules to transform the sentences
     val translated = applyRules(dRules, sentsByRule)
     //now convert to fol and apply resolution to get rules
-    val infRules = getRules(translated)
+    val infRules = getRules(candcBasePath, translated)
     //group the extracted rules and combine the groups
     val combined = combineIRFHs(infRules)
     //and save them
@@ -71,31 +74,27 @@ object MaxTransform extends ScoobiApp {
   }*/
 
   /** extracts rules from the sentence pairs */
-  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds map { 
-    ts => convertLeft(ts) flatMap { convertRight(_) } flatMap {  extractRule(_) } toIterable
-  } flatten
+  def getRules(candcBasePath:String, translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
+    val grouped = translateds groupBy { _.orig }
+    val withPath = DObject(candcBasePath) join grouped
+    withPath mapFlatten {
+      case (path, (orig, tss)) => extractAll(new GetFOL(path), orig, tss)
+    }
+  }
 
-  /** converts the original sentence into CNF/list-of-list form and flatmaps it over the translated versions */
-  def convertLeft(ts:TranslatedSentence):Option[LeftTransformedSentence] = for {
-    oTF <- getCNF(ts.orig, "1")
-  } yield LeftTransformedSentence(oTF, ts.trans, ts.ruleId, ts.weight)
+  def extractAll(getFOL:GetFOL, orig:String, tss:Iterable[TranslatedSentence]) = for {
+    origCNF <- getCNF(getFOL, orig, "1").toIterable
+    TranslatedSentence(_, trans, _, ruleId, weight) <- tss
+    transCNF <- getCNF(getFOL, trans, "2", true)
+    (fLeft, _) <- Resolution.resolveToFindDifference(origCNF, transCNF)
+  } yield RuleTypeChange.bringIRF(fLeft, ruleId, weight)
 
-  /** converts the translated sentence to CNF, list-of-list form */
-  def convertRight(lts:LeftTransformedSentence):Option[BothTransformedSentence] = for {
-    tTF <- getCNF(lts.trans, "2", true) 
-  } yield BothTransformedSentence(lts.orig, tTF, lts.ruleId, lts.weight)
-
-  /** extracts a rule from the cnf sentence pairs using the resolution module */
-  def extractRule(bts:BothTransformedSentence):Option[IRFHolder] = for {
-    (fLeft, _) <- Resolution.resolveToFindDifference(bts.orig, bts.trans) 
-  } yield RuleTypeChange.bringIRF(fLeft, bts.ruleId, bts.weight)
-  
   import scalaz.Validation._
   import scala.language.postfixOps
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
-  def getCNF(sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
-    fol <- GetFOL(sent)
+  def getCNF(getFOL:GetFOL, sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
+    fol <- getFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
     lists <- fromTryCatch { FolContainer.cnfToLists(cnf) } leftMap { (t:Throwable) => println("failed lists conv on " + sent); t } toOption
   } yield lists

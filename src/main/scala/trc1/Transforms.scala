@@ -45,8 +45,8 @@ object RuleTypeChange {
 
 
 /** calls c and c and then boxer to get fol expressions*/
-object GetFOL {
-  val candcBase = new File(Properties.envOrNone("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!"))
+class GetFOL(val candcBasePath:String) {
+  val candcBase = new File(candcBasePath)
   val soapClient = new File(candcBase, "bin/soap_client")
   val boxer = new File(candcBase, "bin/boxer")
 
