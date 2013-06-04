@@ -17,7 +17,7 @@ import java.io.File
 object RuleTypeChange {
   val flp = new parse.FolLogicParser
   
-  def bringIRF(ir:InferenceRule, id:Int, weight:Double):IRFHolder = IRFHolder(finalizeInference(ir), List(id), List(weight), 1)
+  def bringIRF(ir:InferenceRule, id:Int, weight:Double):IRFHolder = IRFHolder(ir.inferenceFin, List(id), List(weight), 1)
 
   def mkFOLE(quantifiers:List[(String, Iterable[String])], lhs:List[String], rhs:List[String]):FolExpression = {
     val conj = (side:List[String]) => side map { flp.parse _ } reduce { _ & _ }
@@ -86,3 +86,6 @@ class GetFOL(val candcBasePath:String) {
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
 }
 
+object GetFOL {
+  def apply(candcBasePath:String):GetFOL = new GetFOL(candcBasePath)
+}

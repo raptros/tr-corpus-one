@@ -24,70 +24,62 @@ object MaxTransform extends ScoobiApp {
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences
     val sents = loadSents(batchPath)
-    val matched = matchSents(dRules, sents)
+    val matched = matchSents(candcBasePath, dRules, sents)
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
-    val translated = applyRules(dRules, sentsByRule)
-    //now convert to fol and apply resolution to get rules
-    val infRules = getRules(candcBasePath, translated)
+    val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
+    val translated = applyRules(candcBasePath, dRules2, sentsByRule)
+    val resolved = doResolve(translated)
     //group the extracted rules and combine the groups
-    val combined = combineIRFHs(infRules)
+    val ruleStrings = combineIRFHs(resolved)
     //and save them
-    val strings = combined map { IRFHolders.toString(_) }
-    strings.toTextFile(outPath).persist
+    ruleStrings.toTextFile(outPath).persist
   }
 
+  type LLCNF = List[List[String]]
   def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 50 }
   
   /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
-  def matchSents(dRules:DList[Rule], lines:DList[String]):DList[(String, List[Int])] = {
+  def matchSents(path:String, dRules:DList[Rule], lines:DList[String]):DList[Matched] = {
     val dtrie = dRules map { (new RuleTrieC).addRule(_) } reduce { Reduction(_ + _) }
-    for { (trie, line) <- dtrie join lines } yield line -> (trie findAllRules line.toLowerCase)
+    (DObject(path) join (dtrie join lines)) mapFlatten { computeMatched(_) }
   }
 
+  type Matched = (String, LLCNF, List[Int])
+  def computeMatched(v:(String, (RuleTrieC, String))):Option[Matched] = for {
+    (path, (trie, line)) <- Some(v)
+    matches = trie findAllRules line.toLowerCase if (matches.nonEmpty)
+    cnf <- getCNF(GetFOL(path), line, "1", false) 
+  } yield (line, cnf, matches)
+
   /** reorganize the matched sentences so that every rule has a list of matching sentences.*/
-  def regroupMatched(matched:DList[(String, List[Int])]):DList[(Int, List[String])] = {
-    val withRules:DList[(Int, String)] = matched mapFlatten { sPair => sPair._2 map { _ -> sPair._1 } }
-    val grouped:DList[(Int, Iterable[(Int, String)])] = withRules groupBy { _._1 }
-    grouped map { rPair => rPair._1 -> (rPair._2.toList map { _._2 }) }
+  def regroupMatched(matched:DList[Matched]):DList[(Int, Iterable[(String, LLCNF)])] = {
+    val withRules:DList[(Int, (String, LLCNF))] = matched mapFlatten { 
+      case (s, orig, ids) => ids map { _ -> (s -> orig) } 
+    }
+    withRules.groupByKey
   }
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
-  def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[TranslatedSentence] = {
+  def applyRules(path:String, dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[PairedCNF] = {
     val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
-    val joint = indexedRules join sents
-    joint mapFlatten {
-      case (id, (rule, sents)) => applySingleRule(rule, sents)
+    val joints = DObject(path) join (indexedRules blockJoin sents)
+    joints mapFlatten {
+      case (path, (id, (rule, sents))) => applySingleRule(path, rule, sents)
     }
   }
 
-  /** flatmaps a rule over a list of sentences to get transformed versions.*/
-  def applySingleRule(rule:Rule, sents:List[String]):List[TranslatedSentence] = {
-    val applier = new RuleApplier(rule)
-    sents flatMap { applier(_) }
-  }
+  type PairedCNF = (LLCNF, LLCNF, Int, Double)
 
-  /** extracts rules from the sentence pairs */
-  /*def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy { _.orig } mapFlatten { 
-    case (o, tss) => convertToRule(o, tss)
-  }*/
+  def applySingleRule(path:String, rule:Rule, sents:Iterable[(String, LLCNF)]):Iterable[PairedCNF] = 
+    apSR(GetFOL(path), new RuleApplier(rule), sents)
 
-  /** extracts rules from the sentence pairs */
-  def getRules(candcBasePath:String, translateds:DList[TranslatedSentence]):DList[IRFHolder] = {
-    val grouped = translateds groupBy { _.orig }
-    val withPath = DObject(candcBasePath) join grouped
-    withPath mapFlatten {
-      case (path, (orig, tss)) => extractAll(new GetFOL(path), orig, tss)
-    }
-  }
-
-  def extractAll(getFOL:GetFOL, orig:String, tss:Iterable[TranslatedSentence]) = for {
-    origCNF <- getCNF(getFOL, orig, "1").toIterable
-    TranslatedSentence(_, trans, _, ruleId, weight) <- tss
+  def apSR(getFOL:GetFOL, applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[PairedCNF] = for {
+    (sent, origCNF) <- sents
+    TranslatedSentence(_, trans, _, id, weight) <- applier(sent)
     transCNF <- getCNF(getFOL, trans, "2", true)
-    (fLeft, _) <- Resolution.resolveToFindDifference(origCNF, transCNF)
-  } yield RuleTypeChange.bringIRF(fLeft, ruleId, weight)
+  } yield (origCNF, transCNF, id, weight)
 
   import scalaz.Validation._
   import scala.language.postfixOps
@@ -99,14 +91,22 @@ object MaxTransform extends ScoobiApp {
     lists <- fromTryCatch { FolContainer.cnfToLists(cnf) } leftMap { (t:Throwable) => println("failed lists conv on " + sent); t } toOption
   } yield lists
 
+  def doResolve(cnfps:DList[PairedCNF]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
+    val (orig, trans, id, weight) = cnfp
+    val oRes = Resolution.resolveToFindDifference(orig, trans)
+    oRes map { case (fLeft, _) => RuleTypeChange.bringIRF(fLeft, id, weight) }
+  }
+
   /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
     * up the generation counts
     */
-  def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = irfhs groupBy { 
+  def combineIRFHs(irfhs:DList[IRFHolder]):DList[String] = irfhs groupBy { 
     IRFHolders.toKey(_)
   } combine { 
     Reduction(IRFHolders.combine(_:IRFHolder, _:IRFHolder)) 
-  } values
+  } map { 
+    case (_, irfh) =>  IRFHolders.toString(irfh)
+  }
 }
 
 /** preproccesses rules by seperating ones that convert between single content words from more complex rules */

@@ -3,7 +3,7 @@ import scala.sys.process._
 import logic._
 import utcompling.scalalogic.fol.expression._
 import collection.immutable.{Set => ISet}
-import resolution.{InferenceRule, InferenceRuleFinal, finalizeInference}
+import resolution.{InferenceRule, InferenceRuleFinal}
 import scalaz.std.option._
 import scalaz.syntax.apply._
 import scalaz.syntax.std.option._
