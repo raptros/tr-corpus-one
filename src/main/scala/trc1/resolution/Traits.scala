@@ -118,7 +118,7 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
     } else {
       val (pred1, args1) = separatePredArg(t1)
       val (pred2, args2) = separatePredArg(t2)
-      (pred1 == pred2 && args1.size == args2.size) ?? computeSubstitution1(args1, args2)
+      (pred1 == pred2 && args1.size == args2.size) ?? computeSubstitution1(args1, args2, substitution)
     }
   }
     
@@ -129,8 +129,13 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
 
   type OSub = Option[Substitution]
 
-  /** Make pairs of matching arguments from 1st and 2ns term, then iterate through them starting with an Option on an empty substitution.
-    * Each successive term pair adds to the substitution, or changes the Option to None. Once it is changed to None, it stays None.
+  /** computes a new substitution by traversing the paired arguments lists - each argument pair will either add to the substitution, or
+    * wipe out the substitution for the rest of the traversal.
+    * @param l1 the first list of arguments
+    * @param l2 the second list
+    * @param substitution the substitution to add to in computing, empty by default
+    * @return the substitution optionally computed by the traversal
+    * @note this assumes that l1 and l2 are the same length.
     */
   def computeSubstitution1(l1:List[String], l2:List[String], substitution:Substitution=newSubstitution):Option[Substitution] = {
     val ut = (p:(String,String)) => (os:OSub) => os flatMap { unifyTerms(p._1, p._2, _) }
