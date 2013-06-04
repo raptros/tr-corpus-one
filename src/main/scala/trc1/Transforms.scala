@@ -7,12 +7,11 @@ import resolution.{InferenceRule, InferenceRuleFinal, finalizeInference}
 import scalaz.std.option._
 import scalaz.syntax.apply._
 import scalaz.syntax.std.option._
+import scalaz.syntax.std.boolean._
+import scala.util.Properties
 
 import scala.language.postfixOps
-
-/** case class representing a pair of sentence versions in FOL. */
-//case class FOLPair(fol1:String, fol2:String, id:Int)
-//case class FOLPair(orig:String, translated:String, fol1:String, fol2:String, rule:String, id:Int)
+import java.io.File
 
 /**a bunch of things to exchange between various rule types.*/
 object RuleTypeChange {
@@ -47,17 +46,43 @@ object RuleTypeChange {
 
 /** calls c and c and then boxer to get fol expressions*/
 object GetFOL {
+  val candcBase = new File(Properties.envOrNone("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!"))
+  val soapClient = new File(candcBase, "bin/soap_client")
+  val boxer = new File(candcBase, "bin/boxer")
 
-  //val candcBase = "/home/02297/coynea90/install/candc"
-  val candcBase = "/home/aidan/Install/candc"
-  val soapClient = s"${candcBase}/bin/soap_client --url http://localhost:9000"
-  val boxer = s"${candcBase}/bin/boxer --stdin --box false --semantics fol --flat false --resolve true --elimeq true --format prolog --instantiate true"
+  val soapClientArgList = List("url" -> "http://localhost:9000")
+
+  val boxerArgList = List(
+    "stdin" -> "", 
+    "box" -> false, 
+    "semantics" -> "fol", 
+    "flat" -> false, 
+    "resolve" -> true, 
+    "elimeq" -> true, 
+    "format" -> "prolog",
+    "instantiate" -> true)
+  
+  lazy val boxerArgs = mkArgString(boxerArgList)
+  lazy val boxerCmd = s"${boxer.getPath} ${boxerArgs}"
+  lazy val soapClientArgs = mkArgString(soapClientArgList)
+  lazy val soapClientCmd = s"${soapClient.getPath} ${soapClientArgs}"
+  
+  /** checks that all the necessary paths are available and readable. 
+    * any app that will use GetFOL should call this at setup time.
+    */
+  def checkPaths() {
+    candcBase.canRead unless { sys.error(s"CANDC_HOME must be set to readable location; ${candcBase.getPath} is not readable!") }
+    soapClient.canRead unless { sys.error(s"${soapClient.getPath} isn't readable! make sure the SOAP system is installed and check the permissions.") }
+    boxer.canRead unless { sys.error(s"${boxer.getPath} can't be read! check your boxer installation and the permissions.") }
+  }
 
   def apply(sentence:String):Option[FolExpression] = {
       val echo = "echo " + sentence
       //external command runs
-      val lStream:Stream[String] = (echo #| soapClient #| boxer lines_!)
+      val lStream:Stream[String] = (echo #| soapClientCmd #| boxerCmd lines_!)
       BoxerFOLParser.findFol(lStream) 
   }
+
+  def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
 }
 

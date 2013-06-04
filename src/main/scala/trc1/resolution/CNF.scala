@@ -49,7 +49,7 @@ class CNF(val clauses:Map[Int, Clause]) {
     literal2 <- clauses(idx).literals if (literal2 isNegationOf literal1)
   } yield (idx, literal2)
 
-  /** 
+  /** resolves as singleton
     * @param clauseIx (the index of) a singleton clause that has just been involved in a resolution step, and thus needs removal
     * @param substitution a substitution that will be applied to all clauses.
     * @return the CNF representing the changes
@@ -59,7 +59,7 @@ class CNF(val clauses:Map[Int, Clause]) {
     throw new ShouldNotBeHereException("trying to resolve nonexisting clause as singleton", clauseIx.toString)
   else applySubstitution2(substitution) { clauses - clauseIx }
 
-  /** 
+  /** resolves with singleton
     * @param clauseIx a clause that has just been involved in a resolution step with a singleton 
     * @param literal the target of the resolution step, and therefore to be removed.
     * @param substitution a substitution that will be applied to all clauses.
@@ -94,7 +94,7 @@ class CNF(val clauses:Map[Int, Clause]) {
     * @throws UnexpectedFormatOfFormulaException if this CNF does not have exactly one clause.
     */
   def negate:CNF = if (clauses.size != 1) 
-    throw new UnexpectedFormatOfFormulaException(toString)
-  else new CNF(clauses.head._2.literals.toList map { l => List(l.negate) })
+    throw new UnexpectedFormatOfFormulaException(s"could not negate b/c clauses.size = ${clauses.size}: ${toString}")
+  else new CNF(clauses(0).literals.toList map { l => List(l.negate) })
 }
 

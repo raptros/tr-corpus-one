@@ -10,7 +10,7 @@ trait BaseApplicationExpression[T <: BaseExpression[T]] extends BaseExpression[T
 
   /**
    * Uncurry this application expression
-   * @return: A tuple (base-function, arg-list)
+   * @return A tuple (base-function, arg-list)
    */
   def uncurry(): (T, List[T]) =
     function match {

@@ -15,6 +15,8 @@ object MaxTransform extends ScoobiApp {
     val rulesPath = args(0)
     val batchPath = args(1)
     val outPath = args(2)
+    //check that GetFOL will be able to run.
+    GetFOL.checkPaths()
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences

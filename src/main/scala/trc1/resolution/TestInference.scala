@@ -265,7 +265,9 @@ class TestInferenceRule extends TestMe {
 class ResolutionTest extends TestMe {
   import Resolution._
   def testme { 
+    println
     println("resolution test")
+    println
     testThisPair(List(List("solve(a)"), List("event(a)"), List("agent(a, b)"), List("person(b)"), 
 		      List("patient(a, c)"), List("problem(c)")),
 		 List(List("-find(E)", "-event(E)", "-agent(E, X)", "-person(X)", 

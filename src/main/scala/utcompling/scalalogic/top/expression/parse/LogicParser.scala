@@ -33,7 +33,7 @@ abstract class LogicParser[T] {
      * @param data: C{str} for the input to be parsed
      * @param signature: C{dict<str, str>} that maps variable names to type
      * strings
-     * @returns: a parsed Expression
+     * @return a parsed Expression
      */
     final def parse(data: String): T = {
         this.beforeParse()

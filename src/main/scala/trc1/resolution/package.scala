@@ -22,15 +22,13 @@ package object resolution {
   def newSubstitutionInit(values:(String,String)*) :Substitution = values.toMap
 
   /** deriving the empty class is an error - G is not supposed to follow from F without any rewriting rule */
-  case class EmptyClauseException(data:String) extends Exception
+  case class EmptyClauseException(data:String) extends Exception(data)
 
   /** unexpected format in formula */
-  case class UnexpectedFormatOfFormulaException(data:String) extends Exception
+  case class UnexpectedFormatOfFormulaException(data:String) extends Exception(data)
 
   /** an attempt to perform some action with some data where it cannot be done sensibly */
-  case class ShouldNotBeHereException(where:String, what:String) extends Exception {
-    val data = s"should not be here: ${where} with ${what}"
-  }
+  case class ShouldNotBeHereException(where:String, what:String) extends Exception(s"should not be here: ${where} with ${what}")
 
   import scalaz._
   import std.map._
@@ -67,5 +65,31 @@ package object resolution {
     def append(m1:CNF, m2: => CNF) = new CNF(m1.toListList ++ m2.toListList)
   }
 
+  /** calls run with arguments flipped, then swaps the resulting pair. */
+  def swapBack[A](run:(A, A) => Option[(A,A)]):(A,A) => Option[(A,A)] = { (l, r) =>
+    run flip(l, r) map { _.swap }
+  }
 
+
+  import State._
+  import syntax.state._
+  import annotation.tailrec
+
+  /** runs sf repeatedly - a do-while loop implemented for State. the step function is run before the test is applied.
+    * @tparam S the type that represents the state
+    * @tparam V the value returned by the step function
+    * @param initState the initial state for the loop
+    * @param sf the state stepping function
+    * @param t a predicate on S to determine if the loop should continue
+    * @return the final state and value
+    */
+  def runWhile[S,V](initState:S)(sf:State[S,V])(t:(S => Boolean)):(S, V) = {
+    @tailrec
+    def loop(sPre:S):(S,V) = {
+      val (s, v) = (sf run sPre)
+      if (t(s)) loop(s) else (s, v)
+    }
+    loop(initState)
+  }
+    
 }

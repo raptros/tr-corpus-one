@@ -55,17 +55,12 @@ import syntax.id._
 import std.boolean._
 import syntax.std.boolean._
 import Validation._
-import Apply._
-import syntax.std.function2._
 import std.anyVal._
 import syntax.monoid._
 import std.tuple._
 
-import annotation.tailrec
-
 object Resolution {
 
-  type StepState = Option[(CNF, CNF)]
   type CNFP = (CNF, CNF)
   type LitPred = Literal => Boolean
   type Step = (Int, Boolean, CNFP)
@@ -80,15 +75,16 @@ object Resolution {
     */
   def resolveToFindDifference(f1:List[List[String]], f2:List[List[String]]):Option[(InferenceRule,InferenceRule)] =  {
     val resv = resolveToFindDifferenceV(f1, f2) 
-    resv.swap foreach { (t:Throwable) => println(t.getMessage) }
+    resv.swap foreach { (t:Throwable) => println(s"have a (${t.getClass}) with message: ${t.getMessage}") }
     resv.toOption
   }
+  
   /** performs the resolution within the context of Validation, to catch exceptions */
   def resolveToFindDifferenceV(f1:List[List[String]], f2:List[List[String]]):Validation[Throwable,(InferenceRule,InferenceRule)] = for {
     formula1 <- fromTryCatch { new CNF(f1) } // empty clause exceptions
     formula2 <- fromTryCatch { new CNF(f2) } // ditto
     outerRes <- fromTryCatch { doResolution(formula1, formula2) } //should-not-be-here, empty clause
-    innerRes <- (outerRes toSuccess (new Throwable("resolution failed"))) //could be None without those
+    innerRes <- (outerRes) //contains the possibility of failure
     (res1, res2) = innerRes //otherwise we get warnings about inability to monadize for filtering
     res2Neg <- fromTryCatch { res2.negate } //negation - unexpected format, probably
     ir1 <- fromTryCatch { new InferenceRule(res1, res2Neg) } //unexpected format
@@ -98,15 +94,22 @@ object Resolution {
   /** performs two stages of resolution:
     * -one pass performed by startPair
     * -repeated loops of stepPair until changes cease, or until a step count limit is reached
-    * @return the new state of the two formulas, as long as resolution was successful
+    * @return the new state of the two formulas after successful resolution, or a failure
     */
-  def doResolution(formula1:CNF, formula2:CNF):Option[CNFP] = for {
-    sp <- startPair(formula1, formula2)
-    initState = (0, true, sp)
-    ((count, last, fp), _) = runUntil(initState)(stepPair) {
+  def doResolution(formula1:CNF, formula2:CNF):Validation[Throwable, CNFP] = {
+    //first resolution stage
+    val sp = startPair(formula1, formula2)
+    val initState = (0, true, sp)
+    //loop for second stage
+    val ((count, last, fp), oFP2) = runWhile(initState)(stepPair) {
       case (c, l, _) => c < 100 && l
     }
-  } yield fp
+    //ensure we have the most recent version of the formula pair
+    val finalForm = oFP2 getOrElse fp
+    //guard against unfinished resolutions by checking last here.
+    if (!last) success(finalForm) else
+      failure(new Exception(f"resolution failed: ran ${count}%d steps but have ${last}"))
+  } 
 
   /** prepares the first stage of resolution - it does resolution on literals L1 of clause C1 and L2 of C2 only if 
     * -either C1 or C2 is a singleton clause,
@@ -114,14 +117,16 @@ object Resolution {
     * event(X) that stem from a Neo-Davidsonian representation
     * -L2 is the only literal that L1 unifies with in formula 1, and vice versa -- or L1 and L2 are fully grounded, and one is the negation
     * of the other
-    * @returns optionally, a pair of CNFS describing the new formula state
+    * @return a pair of cnfs describing what (if any) updates were made.
     * @throws ShouldNotBeHereException if resolution is attempted on something invalid
     * @throws EmptyClauseException if a clause becomes empty
     */
-  def startPair(formula1:CNF, formula2:CNF):Option[CNFP] = for {
-    (f1p, f2p) <- runStepOverClauses(formula1, formula2, true, isContentLiteral) 
-    (f2pp, f1pp) <- runStepOverClauses(f2p, f1p, true, isContentLiteral) 
-  } yield (f1pp -> f2pp)
+  def startPair(f1:CNF, f2:CNF):CNFP = {
+    val rsocCL = (runStepOverClauses(isContentLiteral) _)
+    val p1 = (f1 -> f2)
+    val p2 = (rsocCL tupled p1) getOrElse p1
+    (swapBack(rsocCL) tupled p2) getOrElse p2
+  }
 
   /** steps the state of the second resolution stage, doing resolution on L1 of C1 and L2 of C2 only if:
     * -either C1 or C2 is singleton 
@@ -133,30 +138,29 @@ object Resolution {
     cur <- get:State[Step, Step]
     (count, last, fCur) = cur
     oFNext = last ?? rsocBoth.tupled(fCur) //heck yeah
-    nextState = (count + test(last), oFNext.nonEmpty, oFNext | fCur)
+    nextState = (count + test(last), oFNext.nonEmpty, oFNext getOrElse fCur)
     _ <- put(nextState)
   } yield oFNext
 
   /** runStepOverClauses shortcut - it requires that the literals involved are content or grounded */
-  val rsoc:(CNF, CNF) => Option[CNFP] = runStepOverClauses(_, _, false, isContentOrGrounded)
+  val rsoc:(CNF, CNF) => Option[CNFP] = runStepOverClauses(isContentOrGrounded) _
 
   /** runStepOverClauses combining shortcut - first attempts to do f1, f2, then tries f2, f1 */
-  val rsocBoth:(CNF, CNF) => Option[CNFP] = (f1, f2) => rsoc(f1, f2) orElse { rsoc(f2, f1) map { _.swap } }
+  val rsocBoth:(CNF, CNF) => Option[CNFP] = (f1, f2) => rsoc(f1, f2) orElse swapBack(rsoc)(f1, f2)
 
   /** runs the step clause function over every clause in the first formula passed in
     * @param f1 the formula to step over clauses in
     * @param f2 the formula to look in
-    * @param addLast
     * @param test a predicate for testing whether literals are valid targets
-    * @return optionally, the new state of the formulas
+    * @return optionally, the final state of the formulas
     * @throws ShouldNotBeHereException if resolution is attempted on something invalid
     * @throws EmptyClauseException if a clause becomes empty
     */
-  def runStepOverClauses(f1:CNF, f2:CNF, addLast:Boolean, test:LitPred):Option[CNFP] = {
+  def runStepOverClauses(test:LitPred)(f1:CNF, f2:CNF):Option[CNFP] = {
     val (lastState, changes) = (singletonClauseIndices(f1) runTraverseS (f1 -> f2)) { stepClause(test)(_) }
-    (changes :+ (addLast option lastState)).flatten.lastOption
+    changes.flatten.lastOption
   }
-
+  
   /** steps the state by applying singletonClauseUnificationStep with the arguments. */
   def stepClause(test:LitPred)(ix:Int):State[CNFP, Option[CNFP]] = for {
     fp <- init:State[CNFP, CNFP]
@@ -165,48 +169,38 @@ object Resolution {
     _ <- put(oNewFp | fp)
   } yield oNewFp
 
-  /** runs the stepUntil function from an initial state */
-  def runUntil[S,V](initState:S)(sf:State[S,V])(t:(S => Boolean)):(S, V) = stepUntil[S,V](sf)(t).run(initState)
-
-  /** basically, a do-while loop that operates on States */
-  def stepUntil[S,V](sf:State[S,V])(test:S => Boolean):State[S,V] = for {
-    v <- sf
-    p <- gets(test)
-    n <- p ? stepUntil(sf)(test) | state(v)
-  } yield n
-
   /** searches for a unique unification match for the literal in a singleton clause within a second formula, and attempts to perform
     * resolution with the match.
-    * @returns optionally, the paired, updated f1 and f2.
+    * @return optionally, the paired, updated f1 and f2.
     * @throws ShouldNotBeHereException if one of the resolution targets turns out not to be actually present
     * @throws EmptyClauseException if this causes a clause to become empty
     */
-  def singletonClauseUnificationStep(f1:CNF, f2:CNF, c1Index:Int, testLit: (Literal) => Boolean):Option[CNFP] = for {
+  def singletonClauseUnificationStep(f1:CNF, f2:CNF, c1Index:Int, test:LitPred):Option[CNFP] = for {
     literal1 <- f1.clauses(c1Index).literals.headOption
-    (c2Index, literal2, substitution) <- usableMatch(literal1, f1, f2, testLit)
+    (c2Index, literal2, substitution) <- usableMatch(literal1, f1, f2, test)
     nf1 = f1.resolveAsSingleton(c1Index, substitution) //exceptions here
     nf2 = f2.resolveWithSingleton(c2Index, literal2, substitution) //and here
   } yield (nf1, nf2)
 
-  /** filter for singleton clause indices in formula f */
+  /** returns the indices of the clauses in f that are singleton clauses */
   def singletonClauseIndices(f:CNF):List[Int] = f.clauseIndices.toList filter { ix => f.clauses(ix).isSingleton }
 
-  /** find a usable match in formula f2 given a literal in formula f1:
+  /** finds a usable match in formula f2 given a literal in formula f1:
     * either a literal that is the exact negation of the literal, and both are grounded,
     * or a unique unification match
     */
-  def usableMatch(l1:Literal, f1:CNF, f2:CNF, literalOK:(Literal => Boolean)):Option[(Int,Literal,Substitution)] = {
-    literalOK(l1) ?? (usableMatch1(l1, f1, f2, literalOK) orElse usableMatch2(l1, f1, f2, literalOK))
+  def usableMatch(l1:Literal, f1:CNF, f2:CNF, test:LitPred):Option[(Int,Literal,Substitution)] = {
+    test(l1) ?? (usableMatch1(l1, f1, f2, test) orElse usableMatch2(l1, f1, f2, test))
   }
   
   /** matches a literal exactly negating l1 if both literals are grounded */
-  def usableMatch1(l1:Literal, f1:CNF, f2:CNF, literalOK:(Literal => Boolean)):Option[(Int,Literal,Substitution)] = for {
+  def usableMatch1(l1:Literal, f1:CNF, f2:CNF, test:LitPred) = for {
     (c2Index, l2) <- (f2 groundedNegationMatch l1)
   } yield (c2Index, l2, newSubstitution)
 
   /** finds a unique unification match. */
-  def usableMatch2(l1:Literal, f1:CNF, f2:CNF, literalOK:(Literal => Boolean)):Option[(Int,Literal,Substitution)] = for {
-    (c2idx, l2, substitution) <- (f2 uniqueUnificationMatch l1) if literalOK(l2)
+  def usableMatch2(l1:Literal, f1:CNF, f2:CNF, test:LitPred) = for {
+    (c2idx, l2, substitution) <- (f2 uniqueUnificationMatch l1) if test(l2)
     good <- (f1 uniqueUnificationMatch l2)
   } yield (c2idx, l2, substitution)
 }
