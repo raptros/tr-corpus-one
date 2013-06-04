@@ -35,9 +35,7 @@ class RuleTrieC(val rulesHere:List[Int], val subs:TreeMap[Char, RuleTrieC]) {
   }
 
   /** adds only the left side of the rule, removing the var string (@R@) */
-  def addRule(rule:Rule):RuleTrieC = {
-    addRuleMap(stripVar(rule.lhs), rule.id)
-  }
+  def addRule(rule:Rule):RuleTrieC = addRuleMap(stripVar(rule.lhs), rule.id)
 
     import scala.language.postfixOps
   /** finds rules for every suffix of the input sentence.

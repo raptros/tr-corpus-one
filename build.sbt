@@ -1,8 +1,12 @@
 import AssemblyKeys._
 
+import com.typesafe.sbt.SbtStartScript
+
 assemblySettings
 
 seq(com.github.retronym.SbtOneJar.oneJarSettings: _*)
+
+seq(SbtStartScript.startScriptForClassesSettings: _*)
 
 name := "tr-corpus-one"
 
@@ -10,7 +14,7 @@ version := "0.1"
 
 scalaVersion := "2.10.1"
 
-libraryDependencies += "com.nicta" %% "scoobi" % "0.7.0-RC2-cdh3-SNAPSHOT"
+libraryDependencies += "com.nicta" %% "scoobi" % "0.7.0-RC2-cdh3"
 
 resolvers ++= Seq(
   "Sonatype-snapshots" at "http://oss.sonatype.org/content/repositories/snapshots",

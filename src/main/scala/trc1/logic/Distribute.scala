@@ -7,9 +7,9 @@ import scalaz.syntax.id._
 import collection.mutable.Buffer
 
 /**
- * List-based representation of predicate logic!
- * (i.e. this should only be used after all quantifiers are removed in converting FOL to CNF)
- */
+  * List-based representation of predicate logic!
+  * (i.e. this should only be used after all quantifiers are removed in converting FOL to CNF)
+  */
 sealed abstract class FolContainer {
   /** distribute disjunction over conjunction to complete CNF conversion*/
   def toCNF:FolContainer

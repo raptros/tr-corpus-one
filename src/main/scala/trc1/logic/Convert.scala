@@ -1,14 +1,6 @@
 package trc1.logic
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
-//import utcompling.mlnsemantics.modal._
-//import utcompling.scalalogic.discourse.candc.boxer.expression._
-//import utcompling.scalalogic.drt.expression.DrtExpression
-//import utcompling.scalalogic.discourse.candc.boxer.expression.interpreter.impl._
-//import utcompling.scalalogic.discourse.impl.BoxerDiscourseInterpreter
-//import utcompling.scalalogic.discourse.candc.parse.output.impl._
-//import utcompling.scalalogic.discourse.impl._
-//import utcompling.mlnsemantics.polarity._
 
 /**
   * Takes an FolExpression and transforms it into Conjunction Normal Form.

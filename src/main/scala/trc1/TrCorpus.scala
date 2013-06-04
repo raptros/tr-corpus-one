@@ -1,6 +1,6 @@
 package trc1
 import com.nicta.scoobi.Scoobi._
-import com.nicta.scoobi.core.Reduction
+import com.nicta.scoobi.core.{Reduction, Association1, Grouped}
 import com.nicta.scoobi.lib.Relational
 import scala.io.Source
 import logic.{ConvertToCNF,FolContainer}
@@ -50,8 +50,8 @@ object MaxTransform extends ScoobiApp {
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
   def applyRules(dRules:DList[Rule], sents:DList[(Int, List[String])]):DList[TranslatedSentence] = {
-    val indexedRules:DList[(Int, Rule)] = dRules map { r => r.id -> r }
-    val joint:DList[(Int, (Rule, List[String]))] = Relational.join(indexedRules, sents)
+    val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
+    val joint = indexedRules join sents
     joint mapFlatten {
       case (id, (rule, sents)) => applySingleRule(rule, sents)
     }
@@ -69,15 +69,14 @@ object MaxTransform extends ScoobiApp {
   }*/
 
   /** extracts rules from the sentence pairs */
-  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds groupBy { _.orig } mapFlatten { 
-    case (o, tss) => convertLeft(o, tss)
-  } mapFlatten { convertRight(_) } mapFlatten { extractRule(_) }
-  
+  def getRules(translateds:DList[TranslatedSentence]):DList[IRFHolder] = translateds map { 
+    ts => convertLeft(ts) flatMap { convertRight(_) } flatMap {  extractRule(_) } toIterable
+  } flatten
+
   /** converts the original sentence into CNF/list-of-list form and flatmaps it over the translated versions */
-  def convertLeft(orig:String, tss:Iterable[TranslatedSentence]):Iterable[LeftTransformedSentence] = for {
-    oTF <- getCNF(orig, "1").toIterable
-    TranslatedSentence(_, trans, _, id, weight) <- tss
-  } yield LeftTransformedSentence(oTF, trans, id, weight)
+  def convertLeft(ts:TranslatedSentence):Option[LeftTransformedSentence] = for {
+    oTF <- getCNF(ts.orig, "1")
+  } yield LeftTransformedSentence(oTF, ts.trans, ts.ruleId, ts.weight)
 
   /** converts the translated sentence to CNF, list-of-list form */
   def convertRight(lts:LeftTransformedSentence):Option[BothTransformedSentence] = for {
@@ -102,8 +101,8 @@ object MaxTransform extends ScoobiApp {
   /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
     * up the generation counts
     */
-  def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = irfhs groupBy { irfh =>
-    (irfh.r.lhs mkString "&") -> (irfh.r.rhs mkString "&")
+  def combineIRFHs(irfhs:DList[IRFHolder]):DList[IRFHolder] = irfhs groupBy { 
+    IRFHolders.toKey(_)
   } combine { 
     Reduction(IRFHolders.combine(_:IRFHolder, _:IRFHolder)) 
   } values

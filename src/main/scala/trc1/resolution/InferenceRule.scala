@@ -6,6 +6,11 @@ import scala.util.control.Exception._
 
 import scalaz._
 import syntax.std.boolean._
+import syntax.monoid._
+import std.string._
+import std.list._
+import std.set._
+import std.tuple._
 
 /** Extracts the inference rule from resolved CNFs */
 class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
@@ -27,6 +32,9 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
 
   /** converts a CNF into a list of literals.
     * Note that this means it only handles singleton clauses.
+    * @param f a CNF.
+    * @return a list of literals, prepared and sorted properly
+    * @throws UnexpectedFormatOfFormulaException if the formula is not a flat junction of singletons.
     */
   def cnfToLitList(f:CNF):List[Literal] = if (f.clauses.valuesIterator exists { clause => !clause.isSingleton })
     throw new UnexpectedFormatOfFormulaException("formula not flat " + f)
@@ -50,7 +58,7 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
   }
 
   /** converts a literal to its negation status and predicate symbol */
-  def negAndPredSymbol(lit:Literal):String = (if (lit.isNegated) "-" else "") + lit.predSymbol
+  def negAndPredSymbol(lit:Literal):String = (lit.isNegated) ?? "-"  + lit.predSymbol
 
   /** make a list of all the constants and variables in both the lhs and RHS CNF, remove all occurrences of a duplicate except the first, and
     * pair each constant or variable with a string Xsi for s = l/r for left-hand or right-hand side 
@@ -60,9 +68,9 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
     val argListNodup:List[String] = f.distinct.reverse flatMap { _.argList } filterNot { exceptArguments contains _ }
 
     // sanity check: must be all constants or variables, no function symbols
-    argListNodup foreach { arg => arg match {
+    argListNodup foreach { _ match {
         case constantVariableRegex() =>  // if we match the constant & variable regex, we are good
-        case somethingElse => throw new UnexpectedFormatOfFormulaException(arg) // if we don't match it, we have an error
+        case somethingElse => throw new UnexpectedFormatOfFormulaException(somethingElse) // if we don't match it, we have an error
       }
     }
 
@@ -71,11 +79,12 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
   }
 
 
+  ///here be monoids!
   def literalToStringWithNewArguments(literal:Literal, newArgMap: Map[String,String]):String = {
-    val args = (literal.arity > 0) option { 
+    val args = (literal.arity > 0) ?? {  
       "(" + (literal.argList map { arg => newArgMap.getOrElse(arg, "XXX") } mkString ",") + ")"
-    } getOrElse ""
-    val litSym = if (literal.isNegated) "-" else ""
+    }
+    val litSym = (literal.isNegated) ?? "-" 
     s"${litSym}${literal.predSymbol}${args}"
   }
 
@@ -92,7 +101,7 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
     * universal quantifiers
     */
   val quantifiers:List[(String,Set[String])] =
-    ("forall" -> lhsArgumentMap.values.toSet)::(if (rhsArgumentMap.size > 0) List("exists" -> rhsArgumentMap.values.toSet) else Nil)
+    ("forall" -> lhsArgumentMap.values.toSet)::((rhsArgumentMap.size > 0) ?? List("exists" -> rhsArgumentMap.values.toSet))
 
   /** lhs is a conjunction of literals, realized as a list of strings.  negation is realized as "-".*/
   val lhs:List[String] = lhsOld map { lit => literalToStringWithNewArguments(lit, lhsArgumentMap) }
@@ -109,4 +118,7 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
     lhs == that.asInstanceOf[InferenceRule].lhs && 
     rhs == that.asInstanceOf[InferenceRule].rhs
   }
+
+  /** produces the InferenceRuleFinal version of this. */
+  def inferenceFin:InferenceRuleFinal = InferenceRuleFinal(quantifiers, lhs, rhs)
 }

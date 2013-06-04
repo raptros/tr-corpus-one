@@ -3,7 +3,8 @@ package trc1
 package object logic {
   import utcompling.scalalogic.fol.expression._
   import utcompling.scalalogic.top.expression.Variable
-
+ 
+  /** provides implicit converter to represent logic in fol string format, so that arbitrary expressions can later be read back in. */
   implicit class BoxerFolFormat(exp:FolExpression) {
     //yes
     def toBoxerFolFormat(id:String):String = formatVariable("fol", Variable(id), exp) + "."

@@ -5,10 +5,19 @@ import scala.util.matching.Regex
 import scala.util.control.Exception._
 
 import scalaz._
-import syntax.std.boolean._
+import State._
+import syntax.state._
+import std.list._
 import std.option._
+import std.string._
+import syntax.monoid._
 import optionSyntax._
+import Traverse._
+import syntax.traverse._
 import syntax.monad._
+import syntax.id._
+import syntax.std.boolean._
+import Validation._
 
 /** Given a literal (without negation), separate predicate and arguments and return them as a pair (predicate, argList) predicate is a
   * string, and argList is a list of strings
@@ -23,7 +32,7 @@ trait TakeLiteralApart {
   val negationRegex = new Regex("""^\-(.*?)$""", "pL")
 
   /** use the regular expressions to take apart literals and detect atoms */
-  def separatePredArg(literalString: String) :Pair[String, List[String]] = {
+  def separatePredArg(literalString: String):Pair[String, List[String]] = {
     val oArg = (predArgRegex findFirstMatchIn literalString) map { m => 
       (m group "pred") -> splitArgstring(m group "argstring") // do we have a predicate with arguments?
     }
@@ -35,14 +44,10 @@ trait TakeLiteralApart {
     }
   }
 
-  /** split a string that represents a sequence of comma-separated arguments: don't split where a comma is embedded in an argument, as
+  /** splits a string that represents a sequence of comma-separated arguments; doesn't split where a comma is embedded in an argument, as
     * in f(X, Y)
     */
-  def splitArgstring(
-    argstring:String, 
-    priorBracketLevel:Int = 0,
-    index:Int = 0,
-    startOfArg:Int = 0): List[String] = if (index >= argstring.size) {
+  def splitArgstring(argstring:String, priorBracketLevel:Int = 0, index:Int = 0, startOfArg:Int = 0): List[String] = if (index >= argstring.size) {
     List(argstring.substring(startOfArg).replaceAll("""\s+""", ""))
   } else {
     splitArgstringMatcher(argstring, priorBracketLevel, index, startOfArg)
@@ -67,7 +72,7 @@ trait TakeLiteralApart {
 
   def negateStringLiteral(literalString:String):String = {
     val (posL, lIsNegated) = separateLiteralAndNegation(literalString)
-    if (lIsNegated) posL else ("-" + posL)
+    (!lIsNegated) ?? "-" |+| posL
   }
 }
 
@@ -101,7 +106,6 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
   }
 
   def unifyTerms(t1O:String,t2O:String, substitution:Substitution):Option[Substitution] = {
-    import scala.language.postfixOps
     val t1:String = applySubstitution(t1O, substitution)
     val t2:String = applySubstitution(t2O, substitution)
     
@@ -114,7 +118,7 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
     } else {
       val (pred1, args1) = separatePredArg(t1)
       val (pred2, args2) = separatePredArg(t2)
-      (pred1 == pred2 && args1.size == args2.size) option computeSubstitution1(args1, args2) join
+      (pred1 == pred2 && args1.size == args2.size) ?? computeSubstitution1(args1, args2)
     }
   }
     
@@ -123,9 +127,13 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
     throw new Exception("error in computeSubstitution: term lists differ in length " + l1.toString + " " + l2.toString)
   } else computeSubstitution1(l1, l2)
 
+  type OSub = Option[Substitution]
+
   /** Make pairs of matching arguments from 1st and 2ns term, then iterate through them starting with an Option on an empty substitution.
     * Each successive term pair adds to the substitution, or changes the Option to None. Once it is changed to None, it stays None.
     */
-  def computeSubstitution1(l1:List[String], l2:List[String], substitution:Substitution=newSubstitution):Option[Substitution] = 
-    ((l1 zip l2) foldLeft some(substitution)) { (optsubs, tpair) => optsubs flatMap { subs => unifyTerms(tpair._1, tpair._2, subs) } }
-}
+  def computeSubstitution1(l1:List[String], l2:List[String], substitution:Substitution=newSubstitution):Option[Substitution] = {
+    val ut = (p:(String,String)) => (os:OSub) => os flatMap { unifyTerms(p._1, p._2, _) }
+    (l1 zip l2) traverseS { p => modify(ut(p)) } exec { some(substitution) }
+  }
+} 

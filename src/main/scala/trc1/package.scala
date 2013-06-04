@@ -11,7 +11,6 @@ package object trc1 {
   implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
   implicit val leftTFFmt:WireFormat[LeftTransformedSentence] = mkCaseWireFormat(LeftTransformedSentence, LeftTransformedSentence.unapply _)
   implicit val bothTFFmt:WireFormat[BothTransformedSentence] = mkCaseWireFormat(BothTransformedSentence, BothTransformedSentence.unapply _)
-  //implicit val folPairFMT:WireFormat[FOLPair] = mkCaseWireFormat(FOLPair, FOLPair.unapply _)
   implicit val folRuleFmt:WireFormat[FolRule] = mkCaseWireFormat(FolRule, FolRule.unapply _)
   implicit val irfFmt:WireFormat[InferenceRuleFinal] = mkCaseWireFormat(InferenceRuleFinal, InferenceRuleFinal.unapply _)
   implicit val irfHolderFmt:WireFormat[IRFHolder] = mkCaseWireFormat(IRFHolder, IRFHolder.unapply _)
@@ -28,12 +27,6 @@ package object trc1 {
     }
     def show(fole:FolExpression):String = fole.toBoxerFolFormat
   }
-  //implicit val trieFmt:WireFormat[RuleTrieC] = mkCaseWireFormat(RuleTrieC, RuleTrieC.unapply _)
-
-  import collection.generic.CanBuildFrom
-
-  /*implicit def TreeMapFmt[CC[X, Y] <: TreeMap[X, Y], K, V](implicit wtK: WireFormat[K], wtV: WireFormat[V], bf: CanBuildFrom[_, (K, V),
-    CC[K, V]]):WireFormat[CC[K, V]] = new TraversableFmt(bf())*/
 
   /** creating a wireformat for a recursive data structure turns out to be less than straightforward.*/
   implicit def trieFmt:WireFormat[RuleTrieC] = new WireFormat[RuleTrieC] {
@@ -49,7 +42,6 @@ package object trc1 {
     }
 
     def show(rtc:RuleTrieC):String = rtc.toString
-
   }
 
   import scala.util.matching.Regex
@@ -62,16 +54,8 @@ package object trc1 {
     Rule(parts(0).toInt, parts(1), parts(2), parts(3).toDouble)
   }
 
-  def ruleToString(rule:Rule):String = rule match {
-    case Rule(id, lhs, rhs, weight) => List(id.toString, lhs, rhs, weight.toString).mkString("\t")
-  }
+  def ruleToString(rule:Rule):String = f"${rule.id}\t${rule.lhs}\t${rule.rhs}\t${rule.weight}%f"
 
-  /*val CHARS_LOW=' '.intValue
-  val NUM_CHARS=('z'.intValue) - CHARS_LOW
-  def getCharPos[A](char:Char, array:Array[A]):Option[A] = if (char.intValue < CHARS_LOW) None 
-  else if (char.intValue > NUM_CHARS + CHARS_LOW) None 
-  else array(char.intValue - CHARS_LOW)*/
-  
   val words = """\b\b""".r
   /**turns a sentence into an iterator over strings where each string starts with the word after the first word in the string before.*/
    def atWords(s:String):Iterator[String] = for {
@@ -81,6 +65,12 @@ package object trc1 {
 
   def stripVar(str:String):String = swapRule.replaceAllIn(str, "")
 
-
   val mSep = "<<<@>>>"
+
+  //ugh this is gonna require some serious implicits hacking.
+  /*implicit class RuleHolderOps[A](rh:RuleHolder[A]) {
+    def hToString = RuleHolders.toString(rh)
+
+    def
+  }*/
 }
