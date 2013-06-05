@@ -7,7 +7,6 @@ import logic.{ConvertToCNF,FolContainer}
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
 import resolution.{Resolution, InferenceRuleFinal}
-import scala.util.Properties
 import scalaz.syntax.std.option._
 
 import scala.math.Ordering
@@ -25,8 +24,11 @@ object MaxTransform extends ScoobiApp {
     val batchPath = args(1)
     val outPath = args(2)
     //check that GetFOL will be able to run.
-    val candcBasePath = Properties.envOrNone("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!")
+    val candcBasePath = getEnv("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!")
     (new GetFOL(candcBasePath)).checkPaths()
+    uploadLibJarsFiles()
+    val bytes = configuration.getBytesPerReducer
+    configuration.setBytesPerReducer(bytes/2)
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences
@@ -37,6 +39,7 @@ object MaxTransform extends ScoobiApp {
     //apply the rules to transform the sentences
     val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
     val translated = applyRules(candcBasePath, dRules2, sentsByRule)
+    //and then restructure
     val repaired = uniquePairs(translated)
     val resolved = doResolve(repaired)
     //group the extracted rules and combine the groups
@@ -71,7 +74,7 @@ object MaxTransform extends ScoobiApp {
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
   def applyRules(path:String, dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[PairedCNF] = {
     val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
-    val joints = DObject(path) join (indexedRules blockJoin sents)
+    val joints = DObject(path) join (indexedRules join sents)
     joints mapFlatten {
       case (path, (id, (rule, sents))) => applySingleRule(GetFOL(path), new RuleApplier(rule), sents)
     }

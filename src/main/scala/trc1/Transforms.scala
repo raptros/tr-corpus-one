@@ -82,10 +82,12 @@ class GetFOL(val candcBasePath:String) {
       val echo = "echo " + sentence
       //external command runs
       //i don't like doing this, but I think it'll be much faster.
-      val lb = ListBuffer.empty[FolExpression]
-      val pl = ProcessLogger( _ |> { BoxerFOLParser.extractFol(_) } foreach { lb += _ }, _ => ())
+      ///val lb = ListBuffer.empty[FolExpression]
+      var s = none[FolExpression]
+      val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } |> { oF => s = s orElse oF }
+      val pl = ProcessLogger(onL, _ => ())
       (echo #| soapClientCmd #| boxerCmd) ! pl
-      lb.headOption
+      s
   }
 
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
