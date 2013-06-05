@@ -28,7 +28,8 @@ object MaxTransform extends ScoobiApp {
     (new GetFOL(candcBasePath)).checkPaths()
     uploadLibJarsFiles()
     val bytes = configuration.getBytesPerReducer
-    configuration.setBytesPerReducer(bytes/2)
+    //ramming speed! (seriously though we have to be aggressive about splitting into multiple reducers, i think).
+    configuration.setBytesPerReducer(bytes/8)
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences
@@ -40,7 +41,7 @@ object MaxTransform extends ScoobiApp {
     val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
     val translated = applyRules(candcBasePath, dRules2, sentsByRule)
     //and then restructure
-    val repaired = uniquePairs(translated)
+    val repaired = uniquePairs(candcBasePath, translated)
     val resolved = doResolve(repaired)
     //group the extracted rules and combine the groups
     val ruleStrings = combineIRFHs(resolved)
@@ -72,7 +73,7 @@ object MaxTransform extends ScoobiApp {
   }
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
-  def applyRules(path:String, dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[PairedCNF] = {
+  def applyRules(path:String, dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[Interm] = {
     val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
     val joints = DObject(path) join (indexedRules join sents)
     joints mapFlatten {
@@ -80,17 +81,18 @@ object MaxTransform extends ScoobiApp {
     }
   }
 
-  def applySingleRule(getFOL:GetFOL, applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[PairedCNF] = for {
+  type Interm = ((LLCNF, String), (List[Int], List[Double], Int))
+
+  def applySingleRule(getFOL:GetFOL, applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[Interm] = for {
     (sent, origCNF) <- sents
     TranslatedSentence(_, trans, _, id, weight) <- applier(sent)
-    transCNF <- getCNF(getFOL, trans, "2", true)
-  } yield (origCNF, transCNF, id, weight)
+  } yield (origCNF -> trans) -> (List(id), List(weight), 1) //why 1? it's a count. relax.
 
   import scalaz.Validation._
   //import scala.language.postfixOps
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
-  def getCNF(getFOL:GetFOL, sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
+  def getCNF(getFOL:GetFOL, sent:String, id:String, negate:Boolean=false):Option[LLCNF] = for {
     fol <- getFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
     cnfValid = fromTryCatch { FolContainer.cnfToLists(cnf) }
@@ -104,12 +106,24 @@ object MaxTransform extends ScoobiApp {
 
   val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
 
-  def uniquePairs(pairs:DList[PairedCNF]):DList[RePaired] = (keyed(pairs).groupByKey combine red3) map { 
-    case ((orig, trans), (ids, weights, count)) => (orig, trans, ids, weights, count) 
+  def uniquePairs(path:String, pairs:DList[Interm]):DList[RePaired] = {
+    //val keyed = (DObject(path) join pairs.groupByKey) mapFlatten { doKey(_) }
+    (DObject(path) join (pairs.groupByKey combine red3)) mapFlatten { doCNF(_) }
   }
-  
-  def keyed(pairs:DList[PairedCNF]) = pairs map { case (o, t, i, w) => (o -> t) -> (List(i), List(w), 1)  }
 
+  def doCNF(v:(String, ((LLCNF, String), (List[Int], List[Double], Int)))) = for {
+    (path, ((orig, trans), (ids, weights, count))) <- Some(v)
+    cnf <- getCNF(GetFOL(path), trans, "2", true)
+  } yield (orig, cnf, ids, weights, count)
+
+
+  def doKey(v:(String, (LLCNF, Iterable[(String, Int, Double)]))) = for {
+    (path, (orig, tiws)) <- Iterable(v)
+    getFOL = GetFOL(path)
+    (t, i, w) <- tiws
+    cnf <- getCNF(getFOL, t, "2", true)
+  } yield (orig -> cnf) -> (List(i), List(w), 1)
+  
   /** runs the resolver over the cnf pairs. */
   def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
     val (orig, trans, ids, weights, count) = cnfp

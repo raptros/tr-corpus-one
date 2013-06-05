@@ -79,15 +79,16 @@ class GetFOL(val candcBasePath:String) {
   }
 
   def apply(sentence:String):Option[FolExpression] = {
-      val echo = "echo " + sentence
-      //external command runs
-      //i don't like doing this, but I think it'll be much faster.
-      ///val lb = ListBuffer.empty[FolExpression]
-      var s = none[FolExpression]
-      val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } |> { oF => s = s orElse oF }
-      val pl = ProcessLogger(onL, _ => ())
-      (echo #| soapClientCmd #| boxerCmd) ! pl
-      s
+    import Console.err
+    val echo = "echo " + sentence
+    //external command runs
+    //i don't like doing this, but I think it'll be much faster.
+    ///val lb = ListBuffer.empty[FolExpression]
+    var s = none[FolExpression]
+    val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => println(f.toBoxerFolFormat); s = s orElse some(f) }
+    val pl = ProcessLogger(onL, e => err.println(e))
+    (echo #| soapClientCmd #| boxerCmd) ! pl
+    s
   }
 
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
