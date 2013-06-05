@@ -1,16 +1,14 @@
 package trc1.resolution
 
-import scala.collection._
-import scala.util.matching.Regex
-import scala.util.control.Exception._
-
 import scalaz._
 import syntax.std.boolean._
 import syntax.monoid._
 import std.string._
 import std.list._
-import std.set._
-import std.tuple._
+import std.map._
+import std.anyVal._
+
+import scala.util.matching.Regex
 
 /** Extracts the inference rule from resolved CNFs */
 class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
@@ -39,22 +37,23 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
   def cnfToLitList(f:CNF):List[Literal] = if (f.clauses.valuesIterator exists { clause => !clause.isSingleton })
     throw new UnexpectedFormatOfFormulaException("formula not flat " + f)
   else {
-    // map f to a flat list of literals
+    // map f to  flat list of literals
     val litListUnsorted:List[Literal] = f.clauses.values.toList map { _.literals.head }
 
     // check if we have any predicates that occur more than once. those will go
     // all the way to the end of the list of sorted literals
-    val predCount:Map[String,Int] = litListUnsorted map { lit => Map(negAndPredSymbol(lit) -> 1) } reduce { _ ++ _ }
+    // powered by monoid instances!
+    val predCount:Map[String,Int] = litListUnsorted map { lit => Map(lit.negate -> 1) } reduce { _ |+| _ }
 
     // convert the CNF to a list of literals sorted alphabetically by negation and predicate symbols.
     // Literals whose predicate symbol occurs more than once appear all the way at the end
-    litListUnsorted sortWith { (l1, l2) => 
-      val l1ps = negAndPredSymbol(l1)
-      val l2ps = negAndPredSymbol(l2)
-      val l1pc = predCount.getOrElse(l1ps, 0)
-      val l2pc = predCount.getOrElse(l2ps, 0)
-      if (l1pc != l2pc) l1pc < l2pc else l1ps < l2ps
+    import scala.math.Ordering
+    implicit val litSort:Ordering[Literal] = Ordering.by { (l:Literal) => 
+      val lneg = l.negate
+      val lpc = predCount.getOrElse(lneg, 0)
+      (lpc -> lneg)
     }
+    litListUnsorted.sorted
   }
 
   /** converts a literal to its negation status and predicate symbol */

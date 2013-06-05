@@ -1,17 +1,24 @@
 package trc1
 import com.nicta.scoobi.Scoobi._
-import com.nicta.scoobi.core.{Reduction, Association1, Grouped}
+import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
 import scala.io.Source
 import logic.{ConvertToCNF,FolContainer}
 import utcompling.scalalogic.fol.expression._
 import utcompling.scalalogic.top.expression.Variable
-import resolution.{Resolution, InferenceRuleFinal, finalizeInference, compIRFs}
+import resolution.{Resolution, InferenceRuleFinal}
 import scala.util.Properties
 import scalaz.syntax.std.option._
 
+import scala.math.Ordering
+
 /** MaxTransform implements the complete pipeline for converting the lexical rules into FOL. */
 object MaxTransform extends ScoobiApp {
+
+  type LLCNF = List[List[String]]
+  type PairedCNF = (LLCNF, LLCNF, Int, Double)
+  type RePaired = (LLCNF, LLCNF, List[Int], List[Double], Int)
+
   /** the task pipeline */
   def run() {
     val rulesPath = args(0)
@@ -30,14 +37,14 @@ object MaxTransform extends ScoobiApp {
     //apply the rules to transform the sentences
     val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
     val translated = applyRules(candcBasePath, dRules2, sentsByRule)
-    val resolved = doResolve(translated)
+    val repaired = uniquePairs(translated)
+    val resolved = doResolve(repaired)
     //group the extracted rules and combine the groups
     val ruleStrings = combineIRFHs(resolved)
     //and save them
     ruleStrings.toTextFile(outPath).persist
   }
 
-  type LLCNF = List[List[String]]
   def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 50 }
   
   /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
@@ -66,35 +73,45 @@ object MaxTransform extends ScoobiApp {
     val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
     val joints = DObject(path) join (indexedRules blockJoin sents)
     joints mapFlatten {
-      case (path, (id, (rule, sents))) => applySingleRule(path, rule, sents)
+      case (path, (id, (rule, sents))) => applySingleRule(GetFOL(path), new RuleApplier(rule), sents)
     }
   }
 
-  type PairedCNF = (LLCNF, LLCNF, Int, Double)
-
-  def applySingleRule(path:String, rule:Rule, sents:Iterable[(String, LLCNF)]):Iterable[PairedCNF] = 
-    apSR(GetFOL(path), new RuleApplier(rule), sents)
-
-  def apSR(getFOL:GetFOL, applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[PairedCNF] = for {
+  def applySingleRule(getFOL:GetFOL, applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[PairedCNF] = for {
     (sent, origCNF) <- sents
     TranslatedSentence(_, trans, _, id, weight) <- applier(sent)
     transCNF <- getCNF(getFOL, trans, "2", true)
   } yield (origCNF, transCNF, id, weight)
 
   import scalaz.Validation._
-  import scala.language.postfixOps
+  //import scala.language.postfixOps
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
   def getCNF(getFOL:GetFOL, sent:String, id:String, negate:Boolean=false):Option[List[List[String]]] = for {
     fol <- getFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
-    lists <- fromTryCatch { FolContainer.cnfToLists(cnf) } leftMap { (t:Throwable) => println("failed lists conv on " + sent); t } toOption
+    cnfValid = fromTryCatch { FolContainer.cnfToLists(cnf) }
+    _ = cnfValid.swap foreach { (t:Throwable) => println("failed lists conv on " + sent)  }
+    lists <-  cnfValid.toOption
   } yield lists
 
-  def doResolve(cnfps:DList[PairedCNF]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
-    val (orig, trans, id, weight) = cnfp
+  implicit val llcnfOrd:Ordering[LLCNF] = new Ordering[LLCNF] {
+    def compare(l:LLCNF, r:LLCNF) = Ordering.Iterable[Iterable[String]].compare(l, r)
+  }
+
+  val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
+
+  def uniquePairs(pairs:DList[PairedCNF]):DList[RePaired] = (keyed(pairs).groupByKey combine red3) map { 
+    case ((orig, trans), (ids, weights, count)) => (orig, trans, ids, weights, count) 
+  }
+  
+  def keyed(pairs:DList[PairedCNF]) = pairs map { case (o, t, i, w) => (o -> t) -> (List(i), List(w), 1)  }
+
+  /** runs the resolver over the cnf pairs. */
+  def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
+    val (orig, trans, ids, weights, count) = cnfp
     val oRes = Resolution.resolveToFindDifference(orig, trans)
-    oRes map { case (fLeft, _) => RuleTypeChange.bringIRF(fLeft, id, weight) }
+    oRes map { case (fLeft, _) => IRFHolder(fLeft.inferenceFin, ids, weights, count) }
   }
 
   /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally

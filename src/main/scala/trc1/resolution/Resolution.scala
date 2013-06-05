@@ -38,10 +38,6 @@ package trc1.resolution
  * TO BE DONE.
  */
 
-import scala.collection._
-import scala.util.matching.Regex
-import scala.util.control.Exception._
-
 import scalaz._
 import State._
 import syntax.state._

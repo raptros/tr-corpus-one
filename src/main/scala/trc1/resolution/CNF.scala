@@ -1,16 +1,8 @@
 package trc1.resolution
 
-import scala.collection._
-import scala.util.matching.Regex
-import scala.util.control.Exception._
-
-import scala.language.postfixOps
-
 import scalaz._
 import syntax.id._
 import syntax.std.boolean._
-import std.map._
-import syntax.std.map._
 
 /** represents a formula as a mapping from indices to Clause objects.
   * 

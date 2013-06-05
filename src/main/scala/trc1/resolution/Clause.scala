@@ -1,9 +1,5 @@
 package trc1.resolution
 
-import scala.collection._
-import scala.util.matching.Regex
-import scala.util.control.Exception._
-
 /** Represents the disjunction in a CNF - keeps the literals in a set
   * @param literals1 a set of literals this clause will keep 
   * @note filters out elements

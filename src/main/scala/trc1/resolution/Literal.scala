@@ -1,16 +1,10 @@
 package trc1.resolution
 
-import scala.collection._
-import scala.util.matching.Regex
-import scala.util.control.Exception._
-
 import scalaz._
 import syntax.std.boolean._
 import std.option._
 import std.anyVal._
-import std.map._
 import optionSyntax._
-import syntax.monad._
 import std.string._
 
 

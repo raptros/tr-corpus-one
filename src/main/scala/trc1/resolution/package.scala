@@ -1,10 +1,6 @@
 package trc1
 
 package object resolution {
-  import scala.collection._
-  import scala.util.matching.Regex
-  import scala.util.control.Exception._
-  
   /** this is just the crucial fields out of an InferenceRule */ 
   case class InferenceRuleFinal(quantifiers:List[(String, Set[String])], lhs:List[String], rhs:List[String])
 

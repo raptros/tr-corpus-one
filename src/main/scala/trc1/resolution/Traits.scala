@@ -1,20 +1,13 @@
 package trc1.resolution
 
-import scala.collection._
 import scala.util.matching.Regex
-import scala.util.control.Exception._
 
 import scalaz._
-import State._
-import syntax.state._
 import std.list._
 import std.option._
 import std.string._
 import syntax.monoid._
 import optionSyntax._
-import Traverse._
-import syntax.traverse._
-import syntax.monad._
 import syntax.id._
 import syntax.std.boolean._
 import Validation._
@@ -128,6 +121,12 @@ trait Unification extends TakeLiteralApart with VariableFindAndReplace {
   } else computeSubstitution1(l1, l2)
 
   type OSub = Option[Substitution]
+
+  import State._
+  import syntax.state._
+  import Traverse._
+  import syntax.traverse._
+  import syntax.monad._
 
   /** computes a new substitution by traversing the paired arguments lists - each argument pair will either add to the substitution, or
     * wipe out the substitution for the rest of the traversal.

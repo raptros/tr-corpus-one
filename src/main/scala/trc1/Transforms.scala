@@ -13,9 +13,6 @@ import syntax.std.boolean._
 
 import collection.mutable.ListBuffer
 
-import scala.util.Properties
-
-import scala.language.postfixOps
 import java.io.File
 
 /**a bunch of things to exchange between various rule types.*/
