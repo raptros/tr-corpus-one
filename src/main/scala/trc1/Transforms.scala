@@ -4,10 +4,15 @@ import logic._
 import utcompling.scalalogic.top.expression.Variable
 import utcompling.scalalogic.fol.expression._
 import resolution.{InferenceRule, InferenceRuleFinal, finalizeInference}
-import scalaz.std.option._
-import scalaz.syntax.apply._
-import scalaz.syntax.std.option._
-import scalaz.syntax.std.boolean._
+import scalaz._
+import std.option._
+import optionSyntax._
+import syntax.apply._
+import syntax.id._
+import syntax.std.boolean._
+
+import collection.mutable.ListBuffer
+
 import scala.util.Properties
 
 import scala.language.postfixOps
@@ -79,8 +84,11 @@ class GetFOL(val candcBasePath:String) {
   def apply(sentence:String):Option[FolExpression] = {
       val echo = "echo " + sentence
       //external command runs
-      val lStream:Stream[String] = (echo #| soapClientCmd #| boxerCmd lines_!)
-      BoxerFOLParser.findFol(lStream) 
+      //i don't like doing this, but I think it'll be much faster.
+      val lb = ListBuffer.empty[FolExpression]
+      val pl = ProcessLogger( _ |> { BoxerFOLParser.extractFol(_) } foreach { lb += _ }, _ => ())
+      (echo #| soapClientCmd #| boxerCmd) ! pl
+      lb.headOption
   }
 
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
