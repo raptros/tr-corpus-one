@@ -107,23 +107,16 @@ object MaxTransform extends ScoobiApp {
   val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
 
   def uniquePairs(path:String, pairs:DList[Interm]):DList[RePaired] = {
-    //val keyed = (DObject(path) join pairs.groupByKey) mapFlatten { doKey(_) }
-    (DObject(path) join (pairs.groupByKey combine red3)) mapFlatten { doCNF(_) }
+    val doneCNF = (DObject(path) join pairs) mapFlatten { doCNF(_) }
+    (doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
+    //(DObject(path) join (pairs.groupByKey combine red3)) mapFlatten { doCNF(_) }
   }
 
   def doCNF(v:(String, ((LLCNF, String), (List[Int], List[Double], Int)))) = for {
     (path, ((orig, trans), (ids, weights, count))) <- Some(v)
-    cnf <- getCNF(GetFOL(path), trans, "2", true)
-  } yield (orig, cnf, ids, weights, count)
+    cnf <- getCNF(GetFOL(path), trans, "2", true) if (isSingletonClauses(cnf))
+  } yield ((orig, cnf), (ids, weights, count))
 
-
-  def doKey(v:(String, (LLCNF, Iterable[(String, Int, Double)]))) = for {
-    (path, (orig, tiws)) <- Iterable(v)
-    getFOL = GetFOL(path)
-    (t, i, w) <- tiws
-    cnf <- getCNF(getFOL, t, "2", true) if (isSingletonClauses(cnf))
-  } yield (orig -> cnf) -> (List(i), List(w), 1)
-  
   /** runs the resolver over the cnf pairs. */
   def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
     val (orig, trans, ids, weights, count) = cnfp
