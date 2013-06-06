@@ -24,39 +24,63 @@ sealed abstract class FolJunction extends FolContainer {
   def juncts:List[FolContainer] 
 }
 
+
 case class AtomicExpression(exp:FolExpression) extends FolContainer {
   def toCNF:FolContainer = this
   def toFOLE:FolExpression = exp
 }
 
-case class AndList(jtemp:List[FolContainer]) extends FolJunction {
-  val juncts:List[FolContainer] = {
-    val (pullIn, nj2) = jtemp partition { _.isInstanceOf[AndList] }
-    (pullIn.asInstanceOf[List[AndList]] flatMap { _.juncts }) ++ nj2
-  }
-
+class AndList(val juncts:List[FolContainer]) extends FolJunction {
   def toCNF:FolContainer = AndList(juncts map { _.toCNF })
 
   def toFOLE:FolExpression = juncts map { _.toFOLE } reduceRight { _ & _ }
 }
 
-case class OrList(jtemp:List[FolContainer]) extends FolJunction {
-  val juncts:List[FolContainer] = {
-    val (pullIn, nj2) = jtemp partition { _.isInstanceOf[OrList] }
-    (pullIn.asInstanceOf[List[OrList]] flatMap { _.juncts }) ++ nj2
-  }
+object AndList {
+  def apply(jtemp:List[FolContainer]) = new AndList(juncts(jtemp))
 
+  def unapply(al:AndList) = Some(al.juncts)
+
+  def juncts(jtemp:List[FolContainer]) = {
+    val (p1, p2) = jtemp partition { _.isInstanceOf[AndList] }
+    val pullIn = p1.asInstanceOf[List[AndList]]
+    (pullIn flatMap { _.juncts }) ++ p2
+  }
+}
+
+class OrList(val juncts:List[FolContainer]) extends FolJunction {
   def toCNF:FolContainer = {
     //take the first conjunction from this disjunction, distribute the other terms into it,
     //and then call toCNF on the new conjunction.
-    val (conjs, rest) = juncts partition { _.isInstanceOf[AndList] }
-    conjs.headOption.asInstanceOf[Option[AndList]] some { conj =>
-      (conj.juncts map { (c:FolContainer) => OrList(c :: (conjs.tail ++ rest)) }) |> { AndList(_).toCNF }
-    } none { this } //if there are no conjs this is already in cnf
+    val conjs:List[AndList] = juncts flatMap { 
+      case al:AndList => Some(al)
+      case _ => None
+    }
+    val rest = juncts filterNot { _.isInstanceOf[AndList] }
+    if (conjs.isEmpty) OrList(juncts) else inner(conjs, rest)
   }
+
+  def inner(conjs:List[AndList], rest:List[FolContainer]):FolContainer = {
+    val (conj :: tailConjs) = conjs
+    val nJuncts = conj.juncts map { c => OrList(c :: (tailConjs ++ rest)) }
+    AndList(nJuncts).toCNF
+  } 
 
   def toFOLE:FolExpression = juncts map { _.toFOLE } reduceRight { _ | _ }
 }
+
+object OrList {
+  def apply(jtemp:List[FolContainer]) = new OrList(juncts(jtemp))
+
+  def unapply(ol:OrList) = Some(ol.juncts)
+
+  def juncts(jtemp:List[FolContainer]) = {
+    val (p1, p2) = jtemp partition { _.isInstanceOf[OrList] }
+    val pullIn = p1.asInstanceOf[List[OrList]]
+    (pullIn flatMap { _.juncts }) ++ p2
+  }
+}
+
 
 object FolContainer {
   def apply(exp:FolExpression):FolContainer = exp match {

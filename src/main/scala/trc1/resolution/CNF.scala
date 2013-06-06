@@ -37,7 +37,7 @@ class CNF(val clauses:Map[Int, Clause]) {
 
   /** finds grounded match candidates - comprehension in groundedNegationMatch split out for clarity */
   def groundedNegationMatchCands(literal1:Literal) = for {
-    idx <- clauseIndices.toStream if (literal1.isGrounded)
+    idx <- clauseIndices if (literal1.isGrounded)
     literal2 <- clauses(idx).literals if (literal2 isNegationOf literal1)
   } yield (idx, literal2)
 
@@ -87,6 +87,6 @@ class CNF(val clauses:Map[Int, Clause]) {
     */
   def negate:CNF = if (clauses.size != 1) 
     throw new UnexpectedFormatOfFormulaException(s"could not negate b/c clauses.size = ${clauses.size}: ${toString}")
-  else new CNF(clauses(0).literals.toList map { l => List(l.negate) })
+  else new CNF(clauses.head._2.literals.toList map { l => List(l.negate) })
 }
 

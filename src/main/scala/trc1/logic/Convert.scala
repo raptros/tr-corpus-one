@@ -32,7 +32,7 @@ trait FixVariableNames {
       case FolAllExpression(variable, term) => rename(variable, term) match { case (nVar, nTerm) => fixV(nTerm) all nVar }
       case FolExistsExpression(variable, term) => rename(variable, term) match { case (nVar, nTerm) => fixV(nTerm) exists nVar }
       case FolAndExpression(first, second) => fixV(first) & fixV(second)
-      case FolEqualityExpression(first, second) => FolEqualityExpression(fixV(first), fixV(second))
+      //case FolEqualityExpression(first, second) => FolEqualityExpression(fixV(first), fixV(second))
       case FolOrExpression(first, second) => fixV(first) | fixV(second)
       case FolNegatedExpression(term) => -fixV(term)
       case (varexp:FolVariableExpression) => varexp
@@ -51,12 +51,12 @@ trait ElimImplication {
   def elimImplication(fol:FolExpression):FolExpression = fol match {
     //the crux.
     case FolIfExpression(first, second) => -elimImplication(first) | elimImplication(second)
-    case FolIffExpression(first, second) => elimImplication(first -> second) | elimImplication(second -> first)
+    case FolIffExpression(first, second) => elimImplication(first -> second) & elimImplication(second -> first)
     //just keep searching
     case FolAllExpression(variable, term) => FolAllExpression(variable, elimImplication(term))
     case FolExistsExpression(variable, term) => FolExistsExpression(variable, elimImplication(term))
     case FolAndExpression(first, second) => elimImplication(first) & elimImplication(second)
-    case FolEqualityExpression(first, second) => FolEqualityExpression(elimImplication(first), elimImplication(second))
+    //case FolEqualityExpression(first, second) => FolEqualityExpression(elimImplication(first), elimImplication(second))
     case FolOrExpression(first, second) => elimImplication(first) | elimImplication(second)
     case FolNegatedExpression(term) => -elimImplication(term)
     case FolVariableExpression(variable) => FolVariableExpression(variable)
@@ -74,7 +74,7 @@ trait PushNegation {
     case FolAndExpression(first, second) => findNegation(first) & findNegation(second)
     case FolOrExpression(first, second) => findNegation(first) | findNegation(second)
     //???
-    case FolEqualityExpression(first, second) => FolEqualityExpression(findNegation(first), findNegation(second))
+    //case FolEqualityExpression(first, second) => FolEqualityExpression(findNegation(first), findNegation(second))
     //start pushing down the negation
     case FolNegatedExpression(term) => moveNegation(term)
     //leave atoms alone
@@ -89,7 +89,7 @@ trait PushNegation {
     case FolAndExpression(first, second) => moveNegation(first) | moveNegation(second) // and to or (by DeM)
     case FolOrExpression(first, second) => moveNegation(first) & moveNegation(second) //or to and (by DeM)
     //???
-    case FolEqualityExpression(first, second) => FolEqualityExpression(moveNegation(first), moveNegation(second))
+    //case FolEqualityExpression(first, second) => FolEqualityExpression(moveNegation(first), moveNegation(second))
     //double negation elimination
     case FolNegatedExpression(term) => findNegation(term)
     //leave atoms alone
@@ -115,7 +115,7 @@ trait Skolemize {
     case FolAndExpression(first, second) => skolemizeInner(first, varList) & skolemizeInner(second, varList)
     case FolOrExpression(first, second) => skolemizeInner(first, varList) | skolemizeInner(second, varList)
     //still not sure what to do about these. get rid of them?
-    case FolEqualityExpression(first, second) => FolEqualityExpression(skolemizeInner(first, varList), skolemizeInner(second, varList))
+    //case FolEqualityExpression(first, second) => FolEqualityExpression(skolemizeInner(first, varList), skolemizeInner(second, varList))
     //application needs to be worked on...
     case FolApplicationExpression(func, exp) => func applyto skolemizeInner(exp, varList)
     //leave anything here at the atomic level alone
@@ -138,7 +138,7 @@ trait DropUniversal {
     case FolAndExpression(first, second) => dropUniversal(first) & dropUniversal(second)
     case FolOrExpression(first, second) => dropUniversal(first) | dropUniversal(second)
     //still not sure what to do about these. get rid of them?
-    case FolEqualityExpression(first, second) => FolEqualityExpression(dropUniversal(first), dropUniversal(second))
+    //case FolEqualityExpression(first, second) => FolEqualityExpression(dropUniversal(first), dropUniversal(second))
     //leave anything here at the atomic level alone
     case e:FolLambdaExpression => e 
     case e:FolApplicationExpression => e

@@ -34,7 +34,7 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
     * @return a list of literals, prepared and sorted properly
     * @throws UnexpectedFormatOfFormulaException if the formula is not a flat junction of singletons.
     */
-  def cnfToLitList(f:CNF):List[Literal] = if (f.clauses.valuesIterator exists { clause => !clause.isSingleton })
+  def cnfToLitList(f:CNF):List[Literal] = if (f.clauses.values exists { clause => !clause.isSingleton })
     throw new UnexpectedFormatOfFormulaException("formula not flat " + f)
   else {
     // map f to  flat list of literals
@@ -43,7 +43,7 @@ class InferenceRule(lhsCNF:CNF, rhsCNF:CNF) {
     // check if we have any predicates that occur more than once. those will go
     // all the way to the end of the list of sorted literals
     // powered by monoid instances!
-    val predCount:Map[String,Int] = litListUnsorted map { lit => Map(lit.negate -> 1) } reduce { _ |+| _ }
+    val predCount:Map[String,Int] = (litListUnsorted map { lit => Map(lit.negate -> 1) } foldLeft Map.empty[String, Int]) { _ |+| _ }
 
     // convert the CNF to a list of literals sorted alphabetically by negation and predicate symbols.
     // Literals whose predicate symbol occurs more than once appear all the way at the end

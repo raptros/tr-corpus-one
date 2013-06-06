@@ -85,8 +85,8 @@ class GetFOL(val candcBasePath:String) {
     //i don't like doing this, but I think it'll be much faster.
     ///val lb = ListBuffer.empty[FolExpression]
     var s = none[FolExpression]
-    val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => println(f.toBoxerFolFormat); s = s orElse some(f) }
-    val pl = ProcessLogger(onL, e => err.println(e))
+    val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => s = s orElse some(f) }
+    val pl = ProcessLogger(onL, e => ())
     (echo #| soapClientCmd #| boxerCmd) ! pl
     s
   }

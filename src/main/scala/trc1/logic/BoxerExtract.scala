@@ -10,7 +10,7 @@ object BoxerFOLParser extends JavaTokenParsers {
   
   def fol:Parser[FolExpression] = "fol" ~> "(" ~> variable ~> "," ~> expr <~ ")" <~ "."
 
-  def expr:Parser[FolExpression] = some | all | imp | iff | and | or | not | eq | funct 
+  def expr:Parser[FolExpression] = some | all | imp | iff | and | or | not | funct 
 
   def some = "some" ~> "(" ~> (variable ~ ("," ~> expr)) <~ ")" ^^ {
     case v ~ e => e.exists(v)
@@ -36,10 +36,12 @@ object BoxerFOLParser extends JavaTokenParsers {
   def funct = varExp ~ ("(" ~> rep1sep(varExp, ",") <~ ")") ^^ {
     case name ~ vars => (name::vars) map { _.asInstanceOf[FolExpression] } reduceLeft { _ applyto _ }
   }
+  //instead of handling equality exprssions ever, just treat them as normal predicates!
+  /*
   def eq = "eq" ~> "(" ~> varExp ~ ("," ~> varExp) <~ ")" ^^ {
-    case v1 ~ v2 => FolEqualityExpression(v1,v2)
+    case v1 ~ v2 => FolVariableExpression(Variable("eq"))
   }
-
+  */
   def varExp = variable ^^ (FolVariableExpression(_))
 
   def variable:Parser[Variable] = """\w+""".r ^^ {
