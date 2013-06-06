@@ -7,6 +7,9 @@ package object trc1 {
   import logic.{BoxerFOLParser, BoxerFolFormat}
   import resolution.InferenceRuleFinal
 
+  val CANDC_HOME = "CANDC_HOME"
+  val CANDC_INSTANCE_COUNT = "CANDC_INSTANCE_COUNT"
+
   implicit val ruleFmt:WireFormat[Rule] = mkCaseWireFormat(Rule, Rule.unapply _)
   implicit val translatedFmt:WireFormat[TranslatedSentence] = mkCaseWireFormat(TranslatedSentence, TranslatedSentence.unapply _)
   implicit val leftTFFmt:WireFormat[LeftTransformedSentence] = mkCaseWireFormat(LeftTransformedSentence, LeftTransformedSentence.unapply _)

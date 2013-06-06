@@ -2,35 +2,33 @@
 
 conf=$HADOOP_CONF_DIR
 candc=$CANDC_HOME
+port=9000
+scripts=$HOME/tr-corpus-one/scripts
 
-start_all() {
-    cmd="nohup $candc/bin/soap_server --models $candc/models --server localhost:9000 --candc-printer boxer 1>/dev/null 2>/dev/null"
-    for server in $(cat $conf/slaves $conf/masters);
+start_one() {
+    serv=$1
+    echo "starting on $serv"
+    ssh $server "$scripts/start_on_this_node.sh"
+}
+
+start_each() {
+    servers=$(cat $conf/slaves $conf/masters);
+    for server in $servers
     do
-        ssh $server $cmd&
+        start_one $server
     done
 }
 
-test_all() {
-    test_sentence="i am the very model of a modern major general"
-    test_cmd="echo $test_sentence|$candc/bin/soap_client --url http://localhost:9000|$candc/bin/boxer --stdin --semantics fol --box true 2>/dev/null|tail -n 1"
-    linecount=$(for server in $(cat $conf/slaves $conf/masters)
-    do
-        ssh $server $test_cmd
-    done|wc -l)
-    servcount=$(cat $conf/masters $conf/slaves|wc -l)
-    if [[ $linecount == $servcount ]]
-    then echo "passed"
-    else echo "failed, only $linecount servers passed"
-    fi
+test_each() {
+    $scripts/test_on_each.sh
 }
 
-main() {
-    echo "starting on each server"
-    start_all
-    sleep 20
-    echo "testing"
-    test_all
-}
+echo "starting on each server"
+start_each
 
-main
+echo "started, sleeping"
+
+sleep 10
+test_each
+
+echo "done"

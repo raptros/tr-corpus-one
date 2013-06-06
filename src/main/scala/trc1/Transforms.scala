@@ -49,7 +49,11 @@ object RuleTypeChange {
 
 
 /** calls c and c and then boxer to get fol expressions*/
-class GetFOL(val candcBasePath:String, val instanceCount:Int=1) {
+object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
+  val instanceCount = sys.env.get(CANDC_INSTANCE_COUNT) map { _.toInt } getOrElse { 1 }
+
+  val candcBasePath = sys.env.get(CANDC_HOME).err("CANDC_HOME must be set in order for GetFOL to work!")
+
   val candcBase = new File(candcBasePath)
   val soapClient = new File(candcBase, "bin/soap_client")
   val boxer = new File(candcBase, "bin/boxer")
@@ -104,6 +108,7 @@ class GetFOL(val candcBasePath:String, val instanceCount:Int=1) {
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
 }
 
+/*
 object GetFOL {
   def apply(candcBasePath:String):GetFOL = new GetFOL(candcBasePath)
 
@@ -112,3 +117,4 @@ object GetFOL {
     new GetFOL(basePath, port)
   }
 }
+*/

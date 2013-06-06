@@ -17,7 +17,8 @@ object MaxTransform extends ScoobiApp {
   type LLCNF = List[List[String]]
   type PairedCNF = (LLCNF, LLCNF, Int, Double)
   type RePaired = (LLCNF, LLCNF, List[Int], List[Double], Int)
-  type Interm = ((LLCNF, String), (List[Int], List[Double], Int))
+  type Trip = (List[Int], List[Double], Int)
+  type Interm = ((LLCNF, String), Trip)
 
   type GetFOLInfo = (String, Int)
 
@@ -26,28 +27,19 @@ object MaxTransform extends ScoobiApp {
     val rulesPath = args(0)
     val batchPath = args(1)
     val outPath = args(2)
-    //get env variables for where parser can be found and how many are running
-    val parserCount = getEnv("CANDC_INSTANCE_COUNT") map { _.toInt } getOrElse { 1 }
-    val candcBasePath = getEnv("CANDC_HOME").err("CANDC_HOME must be set in order for GetFOL to work!")
-    //check that GetFOL will be able to run.
-    val gfi = (candcBasePath, parserCount)
-    GetFOL(gfi).checkPaths()
-    //uploadLibJarsFiles() //not necessary
-    val bytes = configuration.getBytesPerReducer
-    //ramming speed! (seriously though we have to be aggressive about splitting into multiple reducers, i think).
-    configuration.setBytesPerReducer(bytes/8)
+    prepare()
     //get the rules 
     val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
     //match sentences
     val sents = loadSents(batchPath)
-    val matched = matchSents(gfi, dRules, sents)
+    val matched = matchSents(dRules, sents)
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
     val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
     val translated = applyRules(dRules2, sentsByRule)
     //and then restructure
-    val repaired = uniquePairs(gfi, outPath, translated)
+    val repaired = uniquePairs(outPath, translated)
     val resolved = doResolve(repaired)
     //group the extracted rules and combine the groups
     val ruleStrings = combineIRFHs(resolved)
@@ -55,19 +47,36 @@ object MaxTransform extends ScoobiApp {
     ruleStrings.toTextFile(outPath).persist
   }
 
+  def prepare() {
+    //get env variables for where parser can be found and how many are running
+    val parserCount = getEnv(CANDC_INSTANCE_COUNT) map { _.toInt } getOrElse { 1 }
+    val candcBasePath = getEnv(CANDC_HOME).err("CANDC_HOME must be set in order for GetFOL to work!")
+    configuration.set("mapred.child.env", s"${CANDC_HOME}=${candcBasePath},${CANDC_INSTANCE_COUNT}=${parserCount}")
+    configuration.set("mapred.max.map.failures.percent", "1000")
+    //minutes times seconds times milliseconds
+    val timeout = 20 * 60 * 1000
+    configuration.set("mapred.task.timeout", s"${timeout}")
+    //check that GetFOL will be able to run.
+    GetFOL.checkPaths()
+    //uploadLibJarsFiles() //not necessary
+    val bytes = configuration.getBytesPerReducer
+    //ramming speed! (seriously though we have to be aggressive about splitting into multiple reducers, i think).
+    configuration.setBytesPerReducer(bytes/8)
+  }
+
   def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 50 }
   
   /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
-  def matchSents(gfi:GetFOLInfo, dRules:DList[Rule], lines:DList[String]):DList[Matched] = {
+  def matchSents(dRules:DList[Rule], lines:DList[String]):DList[Matched] = {
     val dtrie = dRules map { (new RuleTrieC).addRule(_) } reduce { Reduction(_ + _) }
-    (DObject(gfi) join (dtrie join lines)) mapFlatten { computeMatched(_) }
+    (dtrie join lines) mapFlatten { computeMatched(_) }
   }
 
   type Matched = (String, LLCNF, List[Int])
-  def computeMatched(v:(GetFOLInfo, (RuleTrieC, String))):Option[Matched] = for {
-    (gfi, (trie, line)) <- Some(v)
+  def computeMatched(v:(RuleTrieC, String)):Option[Matched] = for {
+    (trie, line) <- Some(v)
     matches = trie findAllRules line.toLowerCase if (matches.nonEmpty)
-    cnf <- getCNF(GetFOL(gfi), line, "1", false) if (isSingletonClauses(cnf))
+    cnf <- getCNF(line, "1", false) if (isSingletonClauses(cnf))
   } yield (line, cnf, matches)
 
   /** reorganize the matched sentences so that every rule has a list of matching sentences.*/
@@ -96,8 +105,8 @@ object MaxTransform extends ScoobiApp {
   //import scala.language.postfixOps
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
-  def getCNF(getFOL:GetFOL, sent:String, id:String, negate:Boolean=false):Option[LLCNF] = for {
-    fol <- getFOL(sent)
+  def getCNF(sent:String, id:String, negate:Boolean=false):Option[LLCNF] = for {
+    fol <- GetFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
     cnfValid = fromTryCatch { FolContainer.cnfToLists(cnf) }
     _ = cnfValid.swap foreach { (t:Throwable) => println("failed lists conv on " + sent)  }
@@ -112,18 +121,18 @@ object MaxTransform extends ScoobiApp {
 
   //def joinPath(base:String, next:String):String = (new File(base, next)).getPath
 
-  def uniquePairs(gfi:GetFOLInfo, outPath:String, pairs:DList[Interm]):DList[RePaired] = {
-    //val doneCNF = (DObject(path) join pairs) map { doCNF(_) } filter { _.nonEmpty } map { _.get }
+  def uniquePairs(outPath:String, pairs:DList[Interm]):DList[RePaired] = {
+    //val doneCNF = pairs map { doCNF(_) } filter { _.nonEmpty } map { _.get }
     //(doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
     val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
-    val doneCNFs = (DObject(gfi) join pre) mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
+    val doneCNFs = pre mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
     (doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
   }
 
-  def doCNF(v:(GetFOLInfo, ((LLCNF, String), (List[Int], List[Double], Int)))) = for {
-    (gfi, ((orig, trans), (ids, weights, count))) <- Some(v)
-    cnf <- getCNF(GetFOL(gfi), trans, "2", true) if (isSingletonClauses(cnf))
-  } yield (orig, cnf) -> (ids, weights, count)
+  def doCNF(v:((LLCNF, String), Trip)) = for {
+    ((orig, trans), trip) <- Some(v)
+    cnf <- getCNF(trans, "2", true) if (isSingletonClauses(cnf))
+  } yield (orig, cnf) -> trip
 
   /** runs the resolver over the cnf pairs. */
   def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
