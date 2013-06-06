@@ -41,7 +41,7 @@ object MaxTransform extends ScoobiApp {
     val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
     val translated = applyRules(candcBasePath, dRules2, sentsByRule)
     //and then restructure
-    val repaired = uniquePairs(candcBasePath, translated)
+    val repaired = uniquePairs(candcBasePath, outPath, translated)
     val resolved = doResolve(repaired)
     //group the extracted rules and combine the groups
     val ruleStrings = combineIRFHs(resolved)
@@ -106,16 +106,20 @@ object MaxTransform extends ScoobiApp {
 
   val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
 
-  def uniquePairs(path:String, pairs:DList[Interm]):DList[RePaired] = {
-    val doneCNF = (DObject(path) join pairs) mapFlatten { doCNF(_) }
-    (doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
-    //(DObject(path) join (pairs.groupByKey combine red3)) mapFlatten { doCNF(_) }
+  //def joinPath(base:String, next:String):String = (new File(base, next)).getPath
+
+  def uniquePairs(path:String, outPath:String, pairs:DList[Interm]):DList[RePaired] = {
+    //val doneCNF = (DObject(path) join pairs) map { doCNF(_) } filter { _.nonEmpty } map { _.get }
+    //(doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
+    val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
+    val doneCNFs = (DObject(path) join pre) mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
+    (doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
   }
 
   def doCNF(v:(String, ((LLCNF, String), (List[Int], List[Double], Int)))) = for {
     (path, ((orig, trans), (ids, weights, count))) <- Some(v)
     cnf <- getCNF(GetFOL(path), trans, "2", true) if (isSingletonClauses(cnf))
-  } yield ((orig, cnf), (ids, weights, count))
+  } yield (orig, cnf) -> (ids, weights, count)
 
   /** runs the resolver over the cnf pairs. */
   def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
