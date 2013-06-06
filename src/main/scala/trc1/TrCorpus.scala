@@ -61,7 +61,7 @@ object MaxTransform extends ScoobiApp {
   def computeMatched(v:(String, (RuleTrieC, String))):Option[Matched] = for {
     (path, (trie, line)) <- Some(v)
     matches = trie findAllRules line.toLowerCase if (matches.nonEmpty)
-    cnf <- getCNF(GetFOL(path), line, "1", false) 
+    cnf <- getCNF(GetFOL(path), line, "1", false) if (isSingletonClauses(cnf))
   } yield (line, cnf, matches)
 
   /** reorganize the matched sentences so that every rule has a list of matching sentences.*/
@@ -121,7 +121,7 @@ object MaxTransform extends ScoobiApp {
     (path, (orig, tiws)) <- Iterable(v)
     getFOL = GetFOL(path)
     (t, i, w) <- tiws
-    cnf <- getCNF(getFOL, t, "2", true)
+    cnf <- getCNF(getFOL, t, "2", true) if (isSingletonClauses(cnf))
   } yield (orig -> cnf) -> (List(i), List(w), 1)
   
   /** runs the resolver over the cnf pairs. */
@@ -141,6 +141,8 @@ object MaxTransform extends ScoobiApp {
   } map { 
     case (_, irfh) =>  IRFHolders.toString(irfh)
   }
+
+  def isSingletonClauses(cnf:LLCNF):Boolean = (cnf.length == 1) || (cnf forall { c => c.length == 1 })
 }
 
 /** preproccesses rules by seperating ones that convert between single content words from more complex rules */
