@@ -15,6 +15,8 @@ import collection.mutable.ListBuffer
 
 import java.io.File
 
+import scala.util.Random
+
 /**a bunch of things to exchange between various rule types.*/
 object RuleTypeChange {
   val flp = new parse.FolLogicParser
@@ -47,12 +49,11 @@ object RuleTypeChange {
 
 
 /** calls c and c and then boxer to get fol expressions*/
-class GetFOL(val candcBasePath:String) {
+class GetFOL(val candcBasePath:String, val instanceCount:Int=1) {
   val candcBase = new File(candcBasePath)
   val soapClient = new File(candcBase, "bin/soap_client")
   val boxer = new File(candcBase, "bin/boxer")
 
-  val soapClientArgList = List("url" -> "http://localhost:9000")
 
   val boxerArgList = List(
     "stdin" -> "", 
@@ -66,9 +67,18 @@ class GetFOL(val candcBasePath:String) {
   
   lazy val boxerArgs = mkArgString(boxerArgList)
   lazy val boxerCmd = s"${boxer.getPath} ${boxerArgs}"
-  lazy val soapClientArgs = mkArgString(soapClientArgList)
-  lazy val soapClientCmd = s"${soapClient.getPath} ${soapClientArgs}"
+  //lazy val soapClientArgs = mkArgString(soapClientArgList)
+  //lazy val soapClientCmd = s"${soapClient.getPath} ${soapClientArgs}"
   
+  val basePort = 9000
+
+  def soapClientCmd = {
+    //randomly select a port - each instance runs on a separate port.
+    val port = basePort + Random.nextInt(instanceCount)
+    val soapClientArg = s"--url http://localhost:${port}"
+    s"${soapClient.getPath} ${soapClientArg}"
+  }
+
   /** checks that all the necessary paths are available and readable. 
     * any app that will use GetFOL should call this at setup time.
     */
@@ -96,4 +106,9 @@ class GetFOL(val candcBasePath:String) {
 
 object GetFOL {
   def apply(candcBasePath:String):GetFOL = new GetFOL(candcBasePath)
+
+  def apply(gfi:(String, Int)):GetFOL = {
+    val (basePath, port) = gfi
+    new GetFOL(basePath, port)
+  }
 }
