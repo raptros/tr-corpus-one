@@ -16,26 +16,19 @@ test_server() {
     if [[ $res ]]; then return 0; else return 1; fi
 }
 
-test_each_server() {
-    servers=$(cat $conf/slaves $conf/masters)
-    counter=0
-    for server in $servers
+test_each() {
+    runcount=0
+    servcount=0
+    for server in $(cat $conf/slaves $conf/masters)
     do
-        if test_server $server
-        then let $(( counter++ ))
-        fi
+        let $(( servcount++ ))
+        if test_server $server; then let $(( runcount++ )); fi
     done
-    echo $counter
-}
-
-test_all() {
-    linecount=$(test_each_server)
-    servcount=$(cat $conf/masters $conf/slaves|wc -l)
-    if [[ $linecount == $servcount ]]
+    if [[ $runcount == $servcount ]]
     then echo "passed"
     else echo "failed, only $linecount servers passed"
     fi
 }
 
 echo "testing"
-test_all
+test_each

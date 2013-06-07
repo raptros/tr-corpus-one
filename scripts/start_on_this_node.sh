@@ -2,7 +2,7 @@
 
 conf=$HADOOP_CONF_DIR
 candc=$CANDC_HOME
-basePort=9000
+basePort=12200
 
 start() {
     port=$(( $1 + $basePort ))

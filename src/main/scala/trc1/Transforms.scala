@@ -74,7 +74,7 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
   //lazy val soapClientArgs = mkArgString(soapClientArgList)
   //lazy val soapClientCmd = s"${soapClient.getPath} ${soapClientArgs}"
   
-  val basePort = 9000
+  val basePort = 12200
 
   def soapClientCmd = {
     //randomly select a port - each instance runs on a separate port.

@@ -52,9 +52,13 @@ object MaxTransform extends ScoobiApp {
     val parserCount = getEnv(CANDC_INSTANCE_COUNT) map { _.toInt } getOrElse { 1 }
     val candcBasePath = getEnv(CANDC_HOME).err("CANDC_HOME must be set in order for GetFOL to work!")
     configuration.set("mapred.child.env", s"${CANDC_HOME}=${candcBasePath},${CANDC_INSTANCE_COUNT}=${parserCount}")
-    configuration.set("mapred.max.map.failures.percent", "1000")
+    configuration.set("mapred.max.map.failures.percent", "100000")
+    //configuration.set("mapred.max.map.failures.percentkip.attempts.to.start.skipping", "10")
+    configuration.set("mapred.max.tracker.blacklists", "1000")
+    configuration.set("mapred.max.tracker.failures", "1000")
+    configuration.set("mapred.map.max.attempts", "2000")
     //minutes times seconds times milliseconds
-    val timeout = 20 * 60 * 1000
+    val timeout = 2 * 60 * 1000
     configuration.set("mapred.task.timeout", s"${timeout}")
     //check that GetFOL will be able to run.
     GetFOL.checkPaths()

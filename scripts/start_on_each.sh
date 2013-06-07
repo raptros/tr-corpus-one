@@ -2,7 +2,7 @@
 
 conf=$HADOOP_CONF_DIR
 candc=$CANDC_HOME
-port=9000
+port=12200
 scripts=$HOME/tr-corpus-one/scripts
 
 start_one() {
