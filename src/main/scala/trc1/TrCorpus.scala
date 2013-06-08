@@ -3,13 +3,14 @@ import com.nicta.scoobi.Scoobi._
 import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
 import scala.io.Source
-import logic.{ConvertToCNF,FolContainer}
-import utcompling.scalalogic.fol.expression._
-import utcompling.scalalogic.top.expression.Variable
-import resolution.{Resolution, InferenceRuleFinal}
 import scalaz.syntax.std.option._
 
 import scala.math.Ordering
+
+import logic.cnf.{ConvertToCNF, FolContainer}
+import logic.fol
+import logic.top.Variable
+import logic.resolution.{Resolution, InferenceRuleFinal}
 
 /** MaxTransform implements the complete pipeline for converting the lexical rules into FOL. */
 object MaxTransform extends ScoobiApp {
@@ -40,7 +41,7 @@ object MaxTransform extends ScoobiApp {
     val translated = applyRules(dRules2, sentsByRule)
     //and then restructure
     val repaired = uniquePairs(outPath, translated)
-    val resolved = doResolve(repaired)
+    val resolved = doResolve(outPath, repaired)
     //group the extracted rules and combine the groups
     val ruleStrings = combineIRFHs(resolved)
     //and save them
@@ -115,7 +116,7 @@ object MaxTransform extends ScoobiApp {
     cnfValid = fromTryCatch { FolContainer.cnfToLists(cnf) }
     _ = cnfValid.swap foreach { (t:Throwable) => println("failed lists conv on " + sent)  }
     lists <-  cnfValid.toOption
-  } yield lists
+  } yield { println(s"have lists ${lists}"); lists }
 
   implicit val llcnfOrd:Ordering[LLCNF] = new Ordering[LLCNF] {
     def compare(l:LLCNF, r:LLCNF) = Ordering.Iterable[Iterable[String]].compare(l, r)
@@ -123,14 +124,14 @@ object MaxTransform extends ScoobiApp {
 
   val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
 
-  //def joinPath(base:String, next:String):String = (new File(base, next)).getPath
-
   def uniquePairs(outPath:String, pairs:DList[Interm]):DList[RePaired] = {
     //val doneCNF = pairs map { doCNF(_) } filter { _.nonEmpty } map { _.get }
     //(doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
-    val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
-    val doneCNFs = pre mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
-    (doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
+    //val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
+    //val doneCNFs = pre mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
+    //(doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
+    val ready = (pairs.groupByKey combine red3) checkpoint(outPath + "_grouped_combined")
+    ready mapFlatten { doCNF(_) } map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }// checkpoint(outPath + "_doneCNFS")
   }
 
   def doCNF(v:((LLCNF, String), Trip)) = for {
@@ -139,11 +140,15 @@ object MaxTransform extends ScoobiApp {
   } yield (orig, cnf) -> trip
 
   /** runs the resolver over the cnf pairs. */
-  def doResolve(cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
+  def doResolve(outPath:String, cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
     val (orig, trans, ids, weights, count) = cnfp
     val oRes = Resolution.resolveToFindDifference(orig, trans)
-    oRes map { case (fLeft, _) => IRFHolder(fLeft.inferenceFin, ids, weights, count) }
-  }
+    oRes map { case (fLeft, _) => 
+      val irfh = IRFHolder(fLeft.inferenceFin, ids, weights, count) 
+      println(s"have inference rule ${IRFHolders.toString(irfh)}")
+      irfh
+    }
+  } //checkpoint(outPath + "_resolutionDone")
 
   /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
     * up the generation counts
@@ -197,15 +202,15 @@ object RemoveSingleContentWordTFRules extends ScoobiApp {
   def isSCWTFRule(stops:Set[String], rule:Rule):Boolean = isSingleContentWord(stops, rule.lhs) && isSingleContentWord(stops, rule.rhs)
 
   /** Converts a single-content-word string into an FOL expression */
-  def prepSide(side:String):FolExpression = {
+  def prepSide(side:String):fol.Expr = {
     val cleaned = stripVar(side).replace("-", "C45").trim
-    FolVariableExpression(Variable(cleaned))
+    fol.VariableExpr(Variable(cleaned))
   }
 
   /** converts a single-content-word Rule into an FOL rule */
   def mkSCWTFFOL(rule:Rule):FolRule = {
     val v = Variable("X")
-    val fve = FolVariableExpression(v)
+    val fve = fol.VariableExpr(v)
     val l = prepSide(rule.lhs) applyto fve
     val r = prepSide(rule.rhs) applyto fve
     val fRule = (l -> r) all v

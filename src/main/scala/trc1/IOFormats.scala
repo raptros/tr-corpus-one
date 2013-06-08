@@ -1,9 +1,12 @@
 package trc1
 import scala.sys.process._
-import logic._
-import utcompling.scalalogic.fol.expression._
+
+import logic.parsing._
+import logic.fol
+
+import logic.resolution.{InferenceRule, InferenceRuleFinal}
+
 import collection.immutable.{Set => ISet}
-import resolution.{InferenceRule, InferenceRuleFinal}
 import scalaz.std.option._
 import scalaz.syntax.apply._
 import scalaz.syntax.std.option._
@@ -18,7 +21,7 @@ trait RuleHolder[A] {
 }
 
 /** stores a rule represented by an Fol expression */
-case class FolRule(r:FolExpression, rules:List[Int], weights:List[Double], count:Int) extends RuleHolder[FolExpression]
+case class FolRule(r:fol.Expr, rules:List[Int], weights:List[Double], count:Int) extends RuleHolder[fol.Expr]
 
 /** stores a rule represented by the quantifiers, lhs, rhs triple (in a case class) */
 case class IRFHolder(r:InferenceRuleFinal, rules:List[Int], weights:List[Double], count:Int) extends RuleHolder[InferenceRuleFinal]
@@ -64,18 +67,18 @@ trait RuleHolders[A, B <: RuleHolder[A]] {
 /** implementation for the FolRule, which uses FolExpressions and boxer's fol format to represent rules.
   * most of the work is done elsewhere
   */
-object FolRules extends RuleHolders[FolExpression, FolRule] {
-  def rToString(r:FolExpression):String = r.toBoxerFolFormat
+object FolRules extends RuleHolders[fol.Expr, FolRule] {
+  def rToString(r:fol.Expr):String = r.toBoxerFolFormat
   
-  def rFromString(l:String):Option[FolExpression] = BoxerFOLParser.extractFol(l)
+  def rFromString(l:String):Option[fol.Expr] = BoxerFOLParser.extractFol(l)
 
-  def mkRH(r:FolExpression, rules:List[Int], weights:List[Double], count:Int):FolRule = {
+  def mkRH(r:fol.Expr, rules:List[Int], weights:List[Double], count:Int):FolRule = {
     FolRule(r, rules, weights, count)
   }
 
   type KeyType = String
 
-  def rToKey(r:FolExpression):String = rToString(r)
+  def rToKey(r:fol.Expr):String = rToString(r)
 }
 
 /** implementation for IRFHolder, which uses the InferenceRule format for rule representation 

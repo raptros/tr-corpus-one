@@ -1,9 +1,14 @@
 package trc1
 import scala.sys.process._
+
 import logic._
-import utcompling.scalalogic.top.expression.Variable
-import utcompling.scalalogic.fol.expression._
+import logic.top.Variable
+import logic.fol
+
+import logic.parsing._
+
 import resolution.{InferenceRule, InferenceRuleFinal, finalizeInference}
+
 import scalaz._
 import std.option._
 import optionSyntax._
@@ -19,19 +24,21 @@ import scala.util.Random
 
 /**a bunch of things to exchange between various rule types.*/
 object RuleTypeChange {
-  val flp = new parse.FolLogicParser
-  
+  type Quant = (String, Iterable[String])
+
   def bringIRF(ir:InferenceRule, id:Int, weight:Double):IRFHolder = IRFHolder(ir.inferenceFin, List(id), List(weight), 1)
 
-  def mkFOLE(quantifiers:List[(String, Iterable[String])], lhs:List[String], rhs:List[String]):FolExpression = {
-    val conj = (side:List[String]) => side map { flp.parse _ } reduce { _ & _ }
-    val quantify = (q:(String, Iterable[String]), e:FolExpression) => q match {
-      case ("exists", variables) => e exists (variables map { Variable(_) })
-      case ("forall", variables) => e all (variables map { Variable(_) })
-    }
-    val start = (conj(lhs) -> conj(rhs)).asInstanceOf[FolExpression]
-    (quantifiers foldRight start) { quantify }
+  def parseQuick(s:String):fol.Expr = (BoxerFOLParser extractExpr s).err("something went wrong tryingg to extract ${s} to FOL!")
+
+  def quantify(q:Quant, e:fol.Expr):fol.Expr = q match {
+    case ("exists", variables) => e exists (variables map { Variable(_) })
+    case ("forall", variables) => e all (variables map { Variable(_) })
   }
+  
+  def conj(side:List[String]):fol.Expr = side map { parseQuick(_) } reduce { _ & _ }
+
+  def mkFOLE(quantifiers:List[Quant], lhs:List[String], rhs:List[String]):fol.Expr = 
+    (quantifiers foldRight (conj(lhs) -> conj(rhs))) { quantify(_, _) }
 
   def irfhToFol(irfh:IRFHolder):FolRule = irfh match { 
     case IRFHolder(InferenceRuleFinal(quants, lhs, rhs), rules, weights, count) => {
@@ -40,7 +47,7 @@ object RuleTypeChange {
   }
 
   //still needs implementing.
-  def mkIRF(fole:FolExpression):Option[InferenceRuleFinal] = None
+  def mkIRF(fole:fol.Expr):Option[InferenceRuleFinal] = None
 
   def folToIrfh(fr:FolRule):Option[IRFHolder] = fr match {
     case FolRule(fole, rules, weights, count) => mkIRF(fole) map { IRFHolder(_, rules, weights, count) }
@@ -92,13 +99,13 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
     boxer.canRead unless { sys.error(s"${boxer.getPath} can't be read! check your boxer installation and the permissions.") }
   }
 
-  def apply(sentence:String):Option[FolExpression] = {
+  def apply(sentence:String):Option[fol.Expr] = {
     import Console.err
     val echo = "echo " + sentence
     //external command runs
     //i don't like doing this, but I think it'll be much faster.
     ///val lb = ListBuffer.empty[FolExpression]
-    var s = none[FolExpression]
+    var s = none[fol.Expr]
     val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => s = s orElse some(f) }
     val pl = ProcessLogger(onL, e => ())
     (echo #| soapClientCmd #| boxerCmd) ! pl

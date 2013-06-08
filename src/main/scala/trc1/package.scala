@@ -2,10 +2,11 @@ package object trc1 {
   import com.nicta.scoobi.Scoobi._
   import java.io.{DataInput, DataOutput}
   import collection.immutable.TreeMap
-  import utcompling.scalalogic.fol.expression._
-  import utcompling.scalalogic.top.expression.Variable
-  import logic.{BoxerFOLParser, BoxerFolFormat}
-  import resolution.InferenceRuleFinal
+
+  import logic.fol.{Expr => FExpr}
+  import logic.top.Variable
+  import logic.parsing.{BoxerFOLParser, BoxerFolFormat}
+  import logic.resolution.InferenceRuleFinal
 
   val CANDC_HOME = "CANDC_HOME"
   val CANDC_INSTANCE_COUNT = "CANDC_INSTANCE_COUNT"
@@ -19,16 +20,16 @@ package object trc1 {
   implicit val irfHolderFmt:WireFormat[IRFHolder] = mkCaseWireFormat(IRFHolder, IRFHolder.unapply _)
 
   /** wire format for FOLs based on the string format conversion*/
-  implicit def folEFmt:WireFormat[FolExpression] = new WireFormat[FolExpression] {
-    def toWire(fole:FolExpression, out:DataOutput) = {
+  implicit def folEFmt:WireFormat[FExpr] = new WireFormat[FExpr] {
+    def toWire(fole:FExpr, out:DataOutput) = {
       StringFmt.toWire(fole.toBoxerFolFormat, out)
     }
 
-    def fromWire(in:DataInput):FolExpression = {
+    def fromWire(in:DataInput):FExpr = {
       val inStr = StringFmt.fromWire(in)
       BoxerFOLParser.extractFol(inStr).get
     }
-    def show(fole:FolExpression):String = fole.toBoxerFolFormat
+    def show(fole:FExpr):String = fole.toBoxerFolFormat
   }
 
   /** creating a wireformat for a recursive data structure turns out to be less than straightforward.*/
