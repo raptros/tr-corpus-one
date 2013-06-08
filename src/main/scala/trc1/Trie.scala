@@ -35,7 +35,7 @@ class RuleTrieC(val rulesHere:List[Int], val subs:TreeMap[Char, RuleTrieC]) {
   }
 
   /** adds only the left side of the rule, removing the var string (@R@) */
-  def addRule(rule:Rule):RuleTrieC = addRuleMap(stripVar(rule.lhs), rule.id)
+  def addRule(rule:Rule):RuleTrieC = addRuleMap(Rules.stripVar(rule.lhs), rule.id)
 
     import scala.language.postfixOps
   /** finds rules for every suffix of the input sentence.
@@ -55,4 +55,12 @@ class RuleTrieC(val rulesHere:List[Int], val subs:TreeMap[Char, RuleTrieC]) {
     val newMap = (rtc.subs foldLeft this.subs) { updateM(_, _) }
     new RuleTrieC(this.rulesHere ++ rtc.rulesHere, newMap)
   }
+
+  val words = """\b\b""".r
+  /**turns a sentence into an iterator over strings where each string starts with the word after the first word in the string before.*/
+   def atWords(s:String):Iterator[String] = for {
+     tail <- (words split s).tails  //split at word boundaries
+     ts = tail.mkString if (!ts.isEmpty && ts(0).isLetterOrDigit) //and filter out the ones that don't start at a word or are empty.
+   } yield ts
+
 }

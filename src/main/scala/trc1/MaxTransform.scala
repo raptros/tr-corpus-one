@@ -2,7 +2,6 @@ package trc1
 import com.nicta.scoobi.Scoobi._
 import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
-import scala.io.Source
 import scalaz.syntax.std.option._
 
 import scala.math.Ordering
@@ -14,6 +13,7 @@ import logic.resolution.{Resolution, InferenceRuleFinal}
 
 /** MaxTransform implements the complete pipeline for converting the lexical rules into FOL. */
 object MaxTransform extends ScoobiApp {
+  import ImplicitFormats._
 
   type LLCNF = List[List[String]]
   type PairedCNF = (LLCNF, LLCNF, Int, Double)
@@ -30,14 +30,14 @@ object MaxTransform extends ScoobiApp {
     val outPath = args(2)
     prepare()
     //get the rules 
-    val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
+    val dRules:DList[Rule]= fromTextFile(rulesPath) map { Rules.ruleFromString(_) }
     //match sentences
     val sents = loadSents(batchPath)
     val matched = matchSents(dRules, sents)
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
-    val dRules2:DList[Rule] = fromTextFile(rulesPath) map { ruleFromString(_) }
+    val dRules2:DList[Rule] = fromTextFile(rulesPath) map { Rules.ruleFromString(_) }
     val translated = applyRules(dRules2, sentsByRule)
     //and then restructure
     val repaired = uniquePairs(outPath, translated)
@@ -162,58 +162,4 @@ object MaxTransform extends ScoobiApp {
   }
 
   def isSingletonClauses(cnf:LLCNF):Boolean = (cnf.length == 1) || (cnf forall { c => c.length == 1 })
-}
-
-/** preproccesses rules by seperating ones that convert between single content words from more complex rules */
-object RemoveSingleContentWordTFRules extends ScoobiApp {
-  /** expects 4 args 
-    * @param stopsPath an input file with a single stopword on each line
-    * @param rulesPath an input file containing rules in the proper format
-    * @param folOutPath the ouput path for the single-content-word rules in FOL format
-    * @param leftOutPath the output path for the rules not removed by this tool
-    */
-  def run() {
-    val stopsPath = args(0)
-    val rulesPath = args(1)
-    val folOutPath = args(2)
-    val leftOutPath = args(3)
-    //load up a set of stopwords
-    val stops:DObject[Set[String]] = fromTextFile(stopsPath) map { Set(_) } reduce Reduction { _ ++ _ }
-    //load rules into a dlist
-    val dRules:DList[Rule]= fromTextFile(rulesPath) map { ruleFromString(_) }
-    //apply predicate to rules to break into two dlists
-    val (scwtfs, leftovers) = breakRules(stops, dRules)
-    //convert the first one into a dlist of FOLs
-    val fRules = scwtfs map { s => FolRules toString mkSCWTFFOL(s) }
-    val leftStrings = leftovers map { ruleToString(_) }
-    persist(fRules.toTextFile(folOutPath), leftStrings.toTextFile(leftOutPath))
-  }
-
-  /** Returns a pair of rule sets by splitting them on the isSCWTFRule predicate. */
-  def breakRules(stops:DObject[Set[String]], dRules:DList[Rule]):(DList[Rule], DList[Rule]) = {
-    val (in, out) = (stops join dRules) partition { (isSCWTFRule(_,_)).tupled }
-    (in map { _._2 }, out map { _._2 })
-  }
-  
-  /** Determines if a string contains only a single content word. */
-  def isSingleContentWord(stops:Set[String], side:String):Boolean = ((side split ' ').length == 1) && !(stops contains stripVar(side))
-
-  /** Determines if both sides of a rule only contain single content words. */
-  def isSCWTFRule(stops:Set[String], rule:Rule):Boolean = isSingleContentWord(stops, rule.lhs) && isSingleContentWord(stops, rule.rhs)
-
-  /** Converts a single-content-word string into an FOL expression */
-  def prepSide(side:String):fol.Expr = {
-    val cleaned = stripVar(side).replace("-", "C45").trim
-    fol.VariableExpr(Variable(cleaned))
-  }
-
-  /** converts a single-content-word Rule into an FOL rule */
-  def mkSCWTFFOL(rule:Rule):FolRule = {
-    val v = Variable("X")
-    val fve = fol.VariableExpr(v)
-    val l = prepSide(rule.lhs) applyto fve
-    val r = prepSide(rule.rhs) applyto fve
-    val fRule = (l -> r) all v
-    FolRule(fRule, List(rule.id), List(rule.weight), 1)
-  }
 }
