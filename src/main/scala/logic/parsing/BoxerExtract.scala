@@ -26,7 +26,7 @@ object BoxerFOLParser extends JavaTokenParsers {
     case e1 ~ e2 => e1 | e2
   }
   def imp = "imp" ~> "(" ~> expr ~ ("," ~> expr) <~ ")" ^^ {
-    case e1 ~ e2 => e1 -> e2
+    case e1 ~ e2 => e1 --> e2
   }
   def iff = "iff" ~> "(" ~> expr ~ ("," ~> expr) <~ ")" ^^ {
     case e1 ~ e2 => e1 <-> e2

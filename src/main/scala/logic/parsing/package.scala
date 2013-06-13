@@ -13,7 +13,7 @@ package object parsing {
 
     def toBoxerFolFormat(e:fol.Expr):String = e match {
       case fol.If(first, second) => formatF2("imp", first, second)
-      case fol.Iff(first, second) => toBoxerFolFormat((first -> second) & (second -> first))
+      case fol.Iff(first, second) => toBoxerFolFormat((first --> second) & (second --> first))
       case fol.All(variable, term) => formatVariable("all", variable, term)
       case fol.Exists(variable, term) => formatVariable("some", variable, term)
       case fol.Equality(first, second) => formatF2("eq", first, second) //though we will hopefully never get these

@@ -38,7 +38,7 @@ object RuleTypeChange {
   def conj(side:List[String]):fol.Expr = side map { parseQuick(_) } reduce { _ & _ }
 
   def mkFOLE(quantifiers:List[Quant], lhs:List[String], rhs:List[String]):fol.Expr = 
-    (quantifiers foldRight (conj(lhs) -> conj(rhs))) { quantify(_, _) }
+    (quantifiers foldRight (conj(lhs) --> conj(rhs))) { quantify(_, _) }
 
   def irfhToFol(irfh:IRFHolder):FolRule = irfh match { 
     case IRFHolder(InferenceRuleFinal(quants, lhs, rhs), rules, weights, count) => {
@@ -114,14 +114,3 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
 
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
 }
-
-/*
-object GetFOL {
-  def apply(candcBasePath:String):GetFOL = new GetFOL(candcBasePath)
-
-  def apply(gfi:(String, Int)):GetFOL = {
-    val (basePath, port) = gfi
-    new GetFOL(basePath, port)
-  }
-}
-*/

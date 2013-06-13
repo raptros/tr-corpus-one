@@ -42,9 +42,14 @@ scoobi makes it very easy to run stuff on your local machine for testing - basic
 in order to get logical forms, this code uses the [Clark and Curran tools][candc] to parse sentences and extract first-order logic. you will need to use the version in the svn repo, and you will also need to follow the instructions for setting up the soap client and server and for installing Boxer. 
 
 once you have those compiled and everything, you need to set up the environment for running:
-* export the environment variable $CANDC\_HOME to point to your C&C parser installation
-* start the soap server with the correct arguments - `$CANDC\_HOME/bin/soap\_server --models $CANDC\_HOME/models --server localhost:9000 --candc-printer boxer` will do the job
+* export the environment variable $CANDC_HOME to point to your C&C parser installation
+* start the soap server with the correct arguments - `$CANDC_HOME/bin/soap_server --models $CANDC_HOME/models --server localhost:9000 --candc-printer boxer` will do the job
 * on the cluster, every machine will need to have the soap server running - i've included some scripts that can check the hadoop conf and use ssh to connect to each machine to run the server, and then test that it's running properly on each.
+
+### parser instances
+I've added functionality to allow the code to use multiple instances of the C&C parser. first step, export $CANDC_INSTANCE_COUNT, then run scripts/start_on_this_node.sh and test_on_this_node.sh to start and test multiple instances on a single node (e.g. your local testing machine); use scripts/start_on_each.sh and scripts/test_on_each.sh to run up the instances on every node. remember that you will have to start the pipeline in an environment where the CANDC_ variables have been set!
+
+to stop the parser instances, stop_on_this_node.sh and stop_on_each_node.sh also are present.
 
 [berant]: http://u.cs.biu.ac.il/~nlp/downloads/ReverbLocalGlobal.html
 [breadme]: http://u.cs.biu.ac.il/~nlp/downloads/REVERB/reverb_readme.txt

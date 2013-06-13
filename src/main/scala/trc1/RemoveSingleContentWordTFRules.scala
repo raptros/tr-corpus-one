@@ -64,7 +64,7 @@ object RemoveSingleContentWordTFRules extends ScoobiApp {
     val fve = fol.VariableExpr(v)
     val l = prepSide(rule.lhs) applyto fve
     val r = prepSide(rule.rhs) applyto fve
-    val fRule = (l -> r) all v
+    val fRule = (l --> r) all v
     FolRule(fRule, List(rule.id), List(rule.weight), 1)
   }
 }

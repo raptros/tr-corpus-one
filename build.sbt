@@ -32,7 +32,7 @@ libraryDependencies ++= Seq(
 
 libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.0.0"
 
-scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature")
+scalacOptions ++= Seq("-deprecation", "-unchecked", "-feature", "-optimise", "-Yinline-warnings")
 
 jarName in assembly := "tacc-hadoop-assembly.jar"
 

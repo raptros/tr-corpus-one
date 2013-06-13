@@ -2,10 +2,31 @@ package logic.cnf
 import logic.{fol => f}
 import logic.top.Variable
 
-import scalaz.syntax.std.option._
-import scalaz.syntax.std.function1._
-import scalaz.syntax.id._
+import logic.parsing.BoxerFolFormat
+
 import collection.mutable.Buffer
+
+import scalaz._
+import Validation._
+import syntax.validation._
+import syntax.apply._
+import syntax.id._
+import syntax.std.option._
+import syntax.std.function1._
+import std.string._
+import std.anyVal._
+
+import annotation.strictfp
+
+object DistributeOrOverAnd extends Conversion {
+  @strictfp
+  def apply(fol:f.Expr):VExpr = try {
+    FolContainer(fol).toCNF.toFOLE.success
+  } catch {
+    case (st:StackOverflowError) => s"failed to convert ${fol.toBoxerFolFormat} to cnf bc stack overflow".fail
+    case (t:Throwable) => s"failed to convert ${fol.toBoxerFolFormat} to cnf because ${t.getMessage}".fail
+  }
+}
 
 /**
   * List-based representation of predicate logic!
@@ -32,8 +53,10 @@ case class AtomicExpression(exp:f.Expr) extends FolContainer {
 }
 
 class AndList(val juncts:List[FolContainer]) extends FolJunction {
+  @strictfp
   def toCNF:FolContainer = AndList(juncts map { _.toCNF })
 
+  @strictfp
   def toFOLE:f.Expr = juncts map { _.toFOLE } reduceRight { _ & _ }
 }
 
@@ -42,6 +65,7 @@ object AndList {
 
   def unapply(al:AndList) = Some(al.juncts)
 
+  @strictfp
   def juncts(jtemp:List[FolContainer]) = {
     val (p1, p2) = jtemp partition { _.isInstanceOf[AndList] }
     val pullIn = p1.asInstanceOf[List[AndList]]
@@ -50,6 +74,7 @@ object AndList {
 }
 
 class OrList(val juncts:List[FolContainer]) extends FolJunction {
+  @strictfp
   def toCNF:FolContainer = {
     //take the first conjunction from this disjunction, distribute the other terms into it,
     //and then call toCNF on the new conjunction.
@@ -61,6 +86,7 @@ class OrList(val juncts:List[FolContainer]) extends FolJunction {
     if (conjs.isEmpty) OrList(juncts) else inner(conjs, rest)
   }
 
+  @strictfp
   def inner(conjs:List[AndList], rest:List[FolContainer]):FolContainer = {
     val (conj :: tailConjs) = conjs
     val nJuncts = conj.juncts map { c => OrList(c :: (tailConjs ++ rest)) }
@@ -75,6 +101,7 @@ object OrList {
 
   def unapply(ol:OrList) = Some(ol.juncts)
 
+  @strictfp
   def juncts(jtemp:List[FolContainer]) = {
     val (p1, p2) = jtemp partition { _.isInstanceOf[OrList] }
     val pullIn = p1.asInstanceOf[List[OrList]]
@@ -84,21 +111,23 @@ object OrList {
 
 
 object FolContainer {
+  @strictfp
   def apply(exp:f.Expr):FolContainer = exp match {
     case f.And(first, second) => AndList(List(FolContainer(first), FolContainer(second)))
     case f.Or(first, second) => OrList(List(FolContainer(first), FolContainer(second)))
-    case x => AtomicExpression(x)
+    case x:f.Expr => AtomicExpression(x)
   }
+
+  @strictfp
   def cnfToLists(fol:f.Expr):List[List[String]] = apply(fol) match {
     case AtomicExpression(exp) => List(List(exp.toString))
     case AndList(juncts) => juncts map { cnfToListsInner(_) }
     case OrList(juncts) => List(juncts map { _.toFOLE.toString })
   }
 
+  @strictfp
   def cnfToListsInner(junct:FolContainer):List[String] = junct match {
     case AtomicExpression(exp) => List(exp.toString)
     case (fj:FolJunction) => fj.juncts map { _.toFOLE.toString }
   }
-
-
 }

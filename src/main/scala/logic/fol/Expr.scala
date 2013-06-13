@@ -15,7 +15,7 @@ abstract class Expr extends Expression with be.Expr {
   
   def |(other:Expr):Expr = Or(this, other)
   
-  def ->(other:Expr):Expr = If(this, other)
+  def -->(other:Expr):Expr = If(this, other)
   
   def <->(other: Expr):Expr = Iff(this, other)
 

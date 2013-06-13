@@ -7,6 +7,8 @@ import scalaz.std._
 import list._, string._, anyVal._
 import scalaz.syntax.id._
 
+import annotation.switch
+
 case class VariableExpr(variable:Variable) extends Expr with be.VariableExpr
 
 case class Negated(term:Expr) extends Expr with be.Negated {
@@ -31,12 +33,14 @@ abstract class Binary(val operator:String) extends Expr with be.Binary
 case class Equality(first:Expr, second:Expr) extends Binary(Tokens.EQ)
 
 abstract class BooleanExpr(operator:String) extends Binary(operator) {
-  override def mkPretty:List[String] = {
-    val firstP = first.mkPretty
-    val secondP = second.mkPretty
-    val fPart = addSpaces(firstP dropRight 1)
-    val sPart = s" ${firstP.last} ${operator}" :: secondP map { " " + _ }
-    Tokens.surroundList(fPart ++ sPart)
+  override def mkPretty:List[String] = (first.mkPretty.reverse) matchOrZero {
+    case (fRevHead :: fRevTail) => mkpInner(fRevHead.toString, fRevTail map { _.toString })
+  }
+
+  def mkpInner(headFR:String, tailFR:List[String]):List[String] = {
+    val tailString = addSpaces(tailFR).reverse
+    val headAndSecond = s" ${headFR} ${operator}" :: addSpaces(second.mkPretty)
+    Tokens.surroundList(tailString ++ headAndSecond)
   }
 }
 

@@ -130,7 +130,7 @@ object MaxTransform extends ScoobiApp {
     //val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
     //val doneCNFs = pre mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
     //(doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
-    val ready = (pairs.groupByKey combine red3) checkpoint(outPath + "_grouped_combined")
+    val ready:DList[Interm] = (pairs.groupByKey combine red3)// checkpoint(outPath + "_grouped_combined")
     ready mapFlatten { doCNF(_) } map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }// checkpoint(outPath + "_doneCNFS")
   }
 
@@ -143,12 +143,8 @@ object MaxTransform extends ScoobiApp {
   def doResolve(outPath:String, cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
     val (orig, trans, ids, weights, count) = cnfp
     val oRes = Resolution.resolveToFindDifference(orig, trans)
-    oRes map { case (fLeft, _) => 
-      val irfh = IRFHolder(fLeft.inferenceFin, ids, weights, count) 
-      println(s"have inference rule ${IRFHolders.toString(irfh)}")
-      irfh
-    }
-  } //checkpoint(outPath + "_resolutionDone")
+    oRes map { case (fLeft, _) => IRFHolder(fLeft.inferenceFin, ids, weights, count) }
+  } checkpoint(outPath + "_resolutionDone")
 
   /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
     * up the generation counts
