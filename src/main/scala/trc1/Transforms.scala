@@ -1,24 +1,27 @@
 package trc1
-import scala.sys.process._
+import sys.process._
 
 import logic._
 import logic.top.Variable
 import logic.fol
 
 import logic.parsing._
+import logic.cnf.VExpr
 
 import resolution.{InferenceRule, InferenceRuleFinal, finalizeInference}
 
 import scalaz._
 import std.option._
+import scalaz.Validation._
 import optionSyntax._
+import syntax.validation._
 import syntax.apply._
 import syntax.id._
 import syntax.std.boolean._
 
 import collection.mutable.ListBuffer
 
-import java.io.File
+import java.io._
 
 import scala.util.Random
 
@@ -99,6 +102,8 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
     s"${soapClient.getPath} ${soapClientArg}"
   }
 
+  def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
+
   /** checks that all the necessary paths are available and readable. 
     * any app that will use GetFOL should call this at setup time.
     */
@@ -108,23 +113,39 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
     boxer.canRead unless { sys.error(s"${boxer.getPath} can't be read! check your boxer installation and the permissions.") }
   }
 
-  def apply(sentence:String):Option[fol.Expr] = {
-    val echo = "echo " + sentence
-    //running the command inside a future
-    val futureOptionFol:Future[Option[fol.Expr]] = future {
-      //the command is to pipe the sentence into soap client and then into boxer
-      val lStream = (echo #| soapClientCmd #| boxerCmd).lines_!
-      //search stream for fol (it's written this way so it'll type check).
-      val oFOL:Option[fol.Expr] = BoxerFOLParser.findFol(lStream)
-      oFOL
-    }
-    //and now, the real trick: timeout the above command linkup if it takes more than 30 seconds to run.
-    try { 
-      Await.result(futureOptionFol, 30.seconds) 
-    } catch {
-      case (t:Throwable) => println(s"got a timeout or some other thing - ${t.getClass} (with) ${t.getMessage}"); None
-    }
-  }
+  /** extracts an FOL expression for a sentence by running external processes.
+    * @returns if successful, an fol expression. if not, a string explaining the failure
+    */
+  def apply(sentence:String):VExpr = for {
+    parserLines <- runCommand(soapClientCmd, List(sentence), 20)
+    boxerLines <- runCommand(boxerCmd, parserLines, 20)
+    fol <- BoxerFOLParser.findFol(boxerLines).toSuccess("output did not contain valid FOL expression")
+  } yield fol
 
-  def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "
+  /** sets up the process to run the command, and passes it to the "inner" variant. */
+  def runCommand(command:String, inputLines:List[String], timeout:Int):Validation[String, List[String]] = {
+    val lines = ListBuffer.empty[String]
+    val logger = ProcessLogger(line => lines += line, _ => ())
+    val io = BasicIO(false, logger) withInput { os =>
+      val ps = new PrintStream(os)
+      inputLines foreach { ps.println _ }
+      ps.close()
+    }
+    val proc = Process(command).run(io)
+    runCommandInner(command, inputLines, timeout)(proc, lines)
+  }
+  
+  /** waits on the completion of the process until the timeout; gathers exceptions into a failure message*/
+  def runCommandInner(command:String, inputLines:List[String], timeout:Int)(proc:Process, lines:ListBuffer[String]):Validation[String, List[String]] = try {
+    val futureRes = future {
+      proc.exitValue()
+      lines.toList
+    }
+    Await.result(futureRes, timeout.seconds).success
+  } catch {
+    //destroy the process if any exception prevents completion.
+    case (timedOut:TimeoutException) => proc.destroy(); s"""execution of "${command}" timed out after ${timeout} seconds""".fail
+    case (interrupt:InterruptedException) => proc.destroy(); s"""thread is interrupted while waiting for "${command}"""".fail
+    case (t:Throwable) => proc.destroy(); s"""execution of "${command}" failed, caught a ${t.getClass}: ${t.getMessage}""".fail
+  }
 }

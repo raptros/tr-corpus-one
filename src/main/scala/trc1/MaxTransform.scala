@@ -2,8 +2,10 @@ package trc1
 import com.nicta.scoobi.Scoobi._
 import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
+
 import scalaz.syntax.std.option._
 import scalaz.syntax.id._
+import scalaz.Validation
 import scalaz.Validation._
 
 import scala.math.Ordering
@@ -18,34 +20,32 @@ object MaxTransform extends ScoobiApp {
   import ImplicitFormats._
 
   type LLCNF = List[List[String]]
-  //type PairedCNF = (LLCNF, LLCNF, Int, Double)
-  //type RePaired = (LLCNF, LLCNF, List[Int], List[Double], Int)
   type Trip = (List[Int], List[Double], Int)
-  //type Interm = ((LLCNF, String), Trip)
+  type Matched = (String, LLCNF, List[Int])
 
-  type GetFOLInfo = (String, Int)
-
-  /** the task pipeline */
+  /** the task pipeline 
+    * steps:
+    * - prepare() (checks some stuff)
+    * - load up the rules
+    * - load and filter sentences
+    * - match and parse (and filter) sentences
+    * - regroup the matches
+    * - apply the rules to transform the sentences
+    * - convert the transformed sentences to cnf, perform resolution, and combine the results
+    * - turn the results into strings, then write them out
+    */
   def run() {
     val rulesPath = args(0)
     val batchPath = args(1)
     val outPath = args(2)
     prepare()
-    //get the rules 
-    val dRules:DList[Rule]= fromTextFile(rulesPath) map { Rules.ruleFromString(_) }
-    //match sentences
+    val dRules:DList[Rule] = fromTextFile(rulesPath) map { Rules.ruleFromString(_) }
     val sents = loadSents(batchPath)
     val matched = matchSents(dRules, sents)
-    //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
-    //apply the rules to transform the sentences
-    val translated = applyRules(dRules, sentsByRule)
-    //and then restructure
-    val resolved = uniqueRules(outPath, translated)
-    //val resolved = doResolve(outPath, repaired)
-    //group the extracted rules and combine the groups
+    val transformed = applyRules(dRules, sentsByRule)
+    val resolved = uniqueRules(outPath, transformed)
     val ruleStrings = resolved map { (RuleTypeChange.irfhFromTuple _) andThen (IRFHolders.toString _) }
-    //and save them
     ruleStrings.toTextFile(outPath).persist
   }
 
@@ -56,33 +56,20 @@ object MaxTransform extends ScoobiApp {
     //check that GetFOL will be able to run.
     GetFOL.checkPaths()
     configuration.set("mapred.child.env", s"${CANDC_HOME}=${candcBasePath},${CANDC_INSTANCE_COUNT}=${parserCount}")
-    //at this point, none of the below is necessary - see GetFOL for why
-    //configuration.set("mapred.max.map.failures.percent", "100000")
-    //configuration.set("mapred.max.map.failures.percentkip.attempts.to.start.skipping", "10")
-    //configuration.set("mapred.max.tracker.blacklists", "1000")
-    //configuration.set("mapred.max.tracker.failures", "1000")
-    //configuration.set("mapred.map.max.attempts", "2000")
-    //minutes times seconds times milliseconds
-    //val timeout = 30 * 60 * 1000
-    //configuration.set("mapred.task.timeout", s"${timeout}")
-    //uploadLibJarsFiles() //not necessary
-    //val bytes = configuration.getBytesPerReducer
-    //ramming speed! (seriously though we have to be aggressive about splitting into multiple reducers, i think).
-    //configuration.setBytesPerReducer(bytes)
   }
 
+  /** loads the sentences into a dlist, and filters out any sentence longer than 50 words. */
   def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => (l split ' ').length < 50 }
   
   /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
   def matchSents(dRules:DList[Rule], lines:DList[String]):DList[Matched] = {
-    val dtrie = dRules map { (new RuleTrieC).addRule(_) } reduce { Reduction(_ + _) }
-    (dtrie join lines) mapFlatten { computeMatched(_) }
+    val dtrie = dRules map { (new RuleTrieC) addRule _ } reduce { Reduction { _ + _ } }
+    (dtrie join lines) mapFlatten { computeMatched _ }
   }
 
-  type Matched = (String, LLCNF, List[Int])
   def computeMatched(v:(RuleTrieC, String)):Option[Matched] = for {
     (trie, line) <- Some(v)
-    matches = trie findAllRules line.toLowerCase if (matches.nonEmpty)
+    matches = trie findAllRules (line.toLowerCase) if (matches.nonEmpty)
     cnf <- getCNF(line, "1", false) if (isSingletonClauses(cnf))
   } yield (line, cnf, matches)
 
@@ -121,25 +108,33 @@ object MaxTransform extends ScoobiApp {
     (doneRules.groupByKey combine red3)
   }
 
+  /** converts the transformed sentence into a CNF */
   def doCNF(v:(LLCNF, String, Int, Double)):Option[(LLCNF, LLCNF, Int, Double)]= for {
     (orig, trans, id, weight) <- Some(v)
     cnf <- getCNF(trans, "2", true) if (isSingletonClauses(cnf))
   } yield (orig, cnf, id, weight)
 
+  /** performs resolution on the pair of llcnfs and produces the result with the appropriate info structures */
   def doResolve(cnfp:(LLCNF, LLCNF, Int, Double)):Option[(InferenceRuleFinal, Trip)] = for {
     (orig, trans, id, weight) <- Some(cnfp)
     (fLeft, _) <- Resolution.resolveToFindDifference(orig, trans)
   } yield fLeft.inferenceFin -> (List(id), List(weight), 1)
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
-  def getCNF(sent:String, id:String, negate:Boolean=false):Option[LLCNF] = for {
+  def getCNF(sent:String, id:String, negate:Boolean=false):Option[LLCNF] = {
+    val llcnfv = getValidCNF(sent, id, negate)
+    llcnfv.swap foreach { m => println(s"""getCNF("${sent}", $id, $negate): $m""") }
+    llcnfv.toOption
+  }
+
+  /** gets the cnf form in the context of successes and failures. */
+  def getValidCNF(sent:String, id:String, negate:Boolean):Validation[String, LLCNF] = for {
     fol <- GetFOL(sent)
     cnf <- ConvertToCNF(if (negate) -fol else fol) { _ + id }
-    cnfValid = fromTryCatch { FolContainer.cnfToLists(cnf) }
-    _ = cnfValid.swap foreach { (t:Throwable) => println("failed lists conv on " + sent)  }
-    lists <-  cnfValid.toOption
-  } yield { println(s"have lists ${lists}"); lists }
-
+    lists <- fromTryCatch { FolContainer.cnfToLists(cnf) } leftMap { t => 
+      s"failed list conversion - ${t.getClass} with msg: ${t.getMessage}"
+    }
+  } yield lists
 
   def isSingletonClauses(cnf:LLCNF):Boolean = (cnf.length == 1) || (cnf forall { c => c.length == 1 })
 }

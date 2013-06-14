@@ -17,7 +17,6 @@ import std.string._
 
 
 trait Conversion {
-  type VExpr = Validation[String, f.Expr]
   def apply(fol:f.Expr):VExpr
 }
 
@@ -31,13 +30,7 @@ trait Conversion {
   * -distribute all disjunctions over conjunctions
   */
 object ConvertToCNF {
-  type VExpr = Validation[String, f.Expr]
- 
-  def apply(fol:f.Expr)(fix:(String => String)):Option[f.Expr] = {
-    val cnf = (runners(fix) foldLeft success[String,f.Expr](fol)) { _ flatMap _ }
-    cnf.swap foreach { m => println(s"conversion to cnf failed because: ${m}") }
-    cnf.toOption
-  }
+  def apply(fol:f.Expr)(fix:(String => String)):VExpr = (runners(fix) foldLeft fol.success[String]) { _ flatMap _ }
 
   type Convert = f.Expr => VExpr
 
