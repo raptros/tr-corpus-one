@@ -61,6 +61,11 @@ object RuleTypeChange {
 
 /** calls c and c and then boxer to get fol expressions*/
 object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
+
+  import scala.concurrent._
+  import duration._
+  import ExecutionContext.Implicits.global
+  
   val instanceCount = sys.env.get(CANDC_INSTANCE_COUNT) map { _.toInt } getOrElse { 1 }
 
   val candcBasePath = sys.env.get(CANDC_HOME).err("CANDC_HOME must be set in order for GetFOL to work!")
@@ -104,14 +109,21 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
   }
 
   def apply(sentence:String):Option[fol.Expr] = {
-    import Console.err
     val echo = "echo " + sentence
-    //external command run; captured by the (ugh) mutable s - an option containing the first expression found
-    var s = none[fol.Expr]
-    val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => s = s orElse some(f) }
-    val pl = ProcessLogger(onL, e => ())
-    (echo #| soapClientCmd #| boxerCmd) ! pl
-    s
+    //running the command inside a future
+    val futureOptionFol:Future[Option[fol.Expr]] = future {
+      //the command is to pipe the sentence into soap client and then into boxer
+      val lStream = (echo #| soapClientCmd #| boxerCmd).lines_!
+      //search stream for fol (it's written this way so it'll type check).
+      val oFOL:Option[fol.Expr] = BoxerFOLParser.findFol(lStream)
+      oFOL
+    }
+    //and now, the real trick: timeout the above command linkup if it takes more than 30 seconds to run.
+    try { 
+      Await.result(futureOptionFol, 30.seconds) 
+    } catch {
+      case (t:Throwable) => println(s"got a timeout or some other thing - ${t.getClass} (with) ${t.getMessage}"); None
+    }
   }
 
   def mkArgString(args:List[(String, Any)]):String = args map { case (opt, arg) => s"--${opt} ${arg}" } mkString " "

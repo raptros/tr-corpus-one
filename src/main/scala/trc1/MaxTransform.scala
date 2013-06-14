@@ -53,21 +53,22 @@ object MaxTransform extends ScoobiApp {
     //get env variables for where parser can be found and how many are running
     val parserCount = getEnv(CANDC_INSTANCE_COUNT) map { _.toInt } getOrElse { 1 }
     val candcBasePath = getEnv(CANDC_HOME).err("CANDC_HOME must be set in order for GetFOL to work!")
-    configuration.set("mapred.child.env", s"${CANDC_HOME}=${candcBasePath},${CANDC_INSTANCE_COUNT}=${parserCount}")
-    configuration.set("mapred.max.map.failures.percent", "100000")
-    //configuration.set("mapred.max.map.failures.percentkip.attempts.to.start.skipping", "10")
-    configuration.set("mapred.max.tracker.blacklists", "1000")
-    configuration.set("mapred.max.tracker.failures", "1000")
-    configuration.set("mapred.map.max.attempts", "2000")
-    //minutes times seconds times milliseconds
-    val timeout = 2 * 60 * 1000
-    configuration.set("mapred.task.timeout", s"${timeout}")
     //check that GetFOL will be able to run.
     GetFOL.checkPaths()
+    configuration.set("mapred.child.env", s"${CANDC_HOME}=${candcBasePath},${CANDC_INSTANCE_COUNT}=${parserCount}")
+    //at this point, none of the below is necessary - see GetFOL for why
+    //configuration.set("mapred.max.map.failures.percent", "100000")
+    //configuration.set("mapred.max.map.failures.percentkip.attempts.to.start.skipping", "10")
+    //configuration.set("mapred.max.tracker.blacklists", "1000")
+    //configuration.set("mapred.max.tracker.failures", "1000")
+    //configuration.set("mapred.map.max.attempts", "2000")
+    //minutes times seconds times milliseconds
+    //val timeout = 30 * 60 * 1000
+    //configuration.set("mapred.task.timeout", s"${timeout}")
     //uploadLibJarsFiles() //not necessary
-    val bytes = configuration.getBytesPerReducer
+    //val bytes = configuration.getBytesPerReducer
     //ramming speed! (seriously though we have to be aggressive about splitting into multiple reducers, i think).
-    configuration.setBytesPerReducer(bytes/8)
+    //configuration.setBytesPerReducer(bytes)
   }
 
   def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => (l split ' ').length < 50 }
