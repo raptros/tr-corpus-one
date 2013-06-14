@@ -3,6 +3,8 @@ import com.nicta.scoobi.Scoobi._
 import com.nicta.scoobi.core.Reduction
 import com.nicta.scoobi.lib.Relational
 import scalaz.syntax.std.option._
+import scalaz.syntax.id._
+import scalaz.Validation._
 
 import scala.math.Ordering
 
@@ -16,10 +18,10 @@ object MaxTransform extends ScoobiApp {
   import ImplicitFormats._
 
   type LLCNF = List[List[String]]
-  type PairedCNF = (LLCNF, LLCNF, Int, Double)
-  type RePaired = (LLCNF, LLCNF, List[Int], List[Double], Int)
+  //type PairedCNF = (LLCNF, LLCNF, Int, Double)
+  //type RePaired = (LLCNF, LLCNF, List[Int], List[Double], Int)
   type Trip = (List[Int], List[Double], Int)
-  type Interm = ((LLCNF, String), Trip)
+  //type Interm = ((LLCNF, String), Trip)
 
   type GetFOLInfo = (String, Int)
 
@@ -37,13 +39,12 @@ object MaxTransform extends ScoobiApp {
     //regroup the sentences 
     val sentsByRule = regroupMatched(matched)
     //apply the rules to transform the sentences
-    val dRules2:DList[Rule] = fromTextFile(rulesPath) map { Rules.ruleFromString(_) }
-    val translated = applyRules(dRules2, sentsByRule)
+    val translated = applyRules(dRules, sentsByRule)
     //and then restructure
-    val repaired = uniquePairs(outPath, translated)
-    val resolved = doResolve(outPath, repaired)
+    val resolved = uniqueRules(outPath, translated)
+    //val resolved = doResolve(outPath, repaired)
     //group the extracted rules and combine the groups
-    val ruleStrings = combineIRFHs(resolved)
+    val ruleStrings = resolved map { (RuleTypeChange.irfhFromTuple _) andThen (IRFHolders.toString _) }
     //and save them
     ruleStrings.toTextFile(outPath).persist
   }
@@ -69,7 +70,7 @@ object MaxTransform extends ScoobiApp {
     configuration.setBytesPerReducer(bytes/8)
   }
 
-  def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => l.split(' ').length < 50 }
+  def loadSents(sentsPath:String):DList[String] = fromTextFile(sentsPath) filter { l => (l split ' ').length < 50 }
   
   /** Finds all the rules that match each sentence. See  trie code for why this stuff works. */
   def matchSents(dRules:DList[Rule], lines:DList[String]):DList[Matched] = {
@@ -93,7 +94,7 @@ object MaxTransform extends ScoobiApp {
   }
 
   /** apply rules by matchin up the ids in rule list with the ids of the sentence lists.*/
-  def applyRules(dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[Interm] = {
+  def applyRules(dRules:DList[Rule], sents:DList[(Int, Iterable[(String, LLCNF)])]):DList[(LLCNF, String, Int, Double)] = {
     val indexedRules:Relational[Int, Rule] = Relational(dRules map { r => r.id -> r })
     val joints = (indexedRules join sents)
     joints mapFlatten {
@@ -101,13 +102,33 @@ object MaxTransform extends ScoobiApp {
     }
   }
 
-  def applySingleRule(applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[Interm] = for {
+  def applySingleRule(applier:RuleApplier, sents:Iterable[(String,LLCNF)]):Iterable[(LLCNF, String, Int, Double)] = for {
     (sent, origCNF) <- sents
     TranslatedSentence(_, trans, _, id, weight) <- applier(sent)
-  } yield (origCNF -> trans) -> (List(id), List(weight), 1) //why 1? it's a count. relax.
+  } yield (origCNF, trans, id, weight)
 
-  import scalaz.Validation._
-  //import scala.language.postfixOps
+  implicit val irfOrd:Ordering[InferenceRuleFinal] = Ordering.by[InferenceRuleFinal, (String, String)] { irf => IRFHolders.rToKey(irf) }
+
+  val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
+
+  /** extracts the cnf for the right side, runs resolution on the pair, and then combines the produced rule with a reduction that tallies up
+    * production counts.
+    */
+  def uniqueRules(outPath:String, pairs:DList[(LLCNF, String, Int, Double)]):DList[(InferenceRuleFinal, Trip)] = {
+    val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
+    val doneRules = pre mapFlatten { doCNF _ } mapFlatten { doResolve _ }
+    (doneRules.groupByKey combine red3)
+  }
+
+  def doCNF(v:(LLCNF, String, Int, Double)):Option[(LLCNF, LLCNF, Int, Double)]= for {
+    (orig, trans, id, weight) <- Some(v)
+    cnf <- getCNF(trans, "2", true) if (isSingletonClauses(cnf))
+  } yield (orig, cnf, id, weight)
+
+  def doResolve(cnfp:(LLCNF, LLCNF, Int, Double)):Option[(InferenceRuleFinal, Trip)] = for {
+    (orig, trans, id, weight) <- Some(cnfp)
+    (fLeft, _) <- Resolution.resolveToFindDifference(orig, trans)
+  } yield fLeft.inferenceFin -> (List(id), List(weight), 1)
   
   /** gets FOL by calling C&C and boxer, then converts that into CNF and gets list-of-list form */
   def getCNF(sent:String, id:String, negate:Boolean=false):Option[LLCNF] = for {
@@ -118,44 +139,6 @@ object MaxTransform extends ScoobiApp {
     lists <-  cnfValid.toOption
   } yield { println(s"have lists ${lists}"); lists }
 
-  implicit val llcnfOrd:Ordering[LLCNF] = new Ordering[LLCNF] {
-    def compare(l:LLCNF, r:LLCNF) = Ordering.Iterable[Iterable[String]].compare(l, r)
-  }
-
-  val red3 = Reduction.list[Int] zip3(Reduction.list[Double], Reduction.Sum.int)
-
-  def uniquePairs(outPath:String, pairs:DList[Interm]):DList[RePaired] = {
-    //val doneCNF = pairs map { doCNF(_) } filter { _.nonEmpty } map { _.get }
-    //(doneCNF.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
-    //val pre = pairs checkpoint(outPath + "_checkpoint_pairs")
-    //val doneCNFs = pre mapFlatten { doCNF(_) } //checkpoint(outPath + "_checkpoint_cnfs")
-    //(doneCNFs.groupByKey combine red3) map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }
-    val ready:DList[Interm] = (pairs.groupByKey combine red3)// checkpoint(outPath + "_grouped_combined")
-    ready mapFlatten { doCNF(_) } map { case ((o, t), (i, w, c)) => (o, t, i, w, c) }// checkpoint(outPath + "_doneCNFS")
-  }
-
-  def doCNF(v:((LLCNF, String), Trip)) = for {
-    ((orig, trans), trip) <- Some(v)
-    cnf <- getCNF(trans, "2", true) if (isSingletonClauses(cnf))
-  } yield (orig, cnf) -> trip
-
-  /** runs the resolver over the cnf pairs. */
-  def doResolve(outPath:String, cnfps:DList[RePaired]):DList[IRFHolder] = cnfps mapFlatten { cnfp =>
-    val (orig, trans, ids, weights, count) = cnfp
-    val oRes = Resolution.resolveToFindDifference(orig, trans)
-    oRes map { case (fLeft, _) => IRFHolder(fLeft.inferenceFin, ids, weights, count) }
-  } checkpoint(outPath + "_resolutionDone")
-
-  /** groups the inference rule holders keyed upon the left and right hand sides of the rule itself, then combines the rule holders to tally
-    * up the generation counts
-    */
-  def combineIRFHs(irfhs:DList[IRFHolder]):DList[String] = irfhs groupBy { 
-    IRFHolders.toKey(_)
-  } combine { 
-    Reduction(IRFHolders.combine(_:IRFHolder, _:IRFHolder)) 
-  } map { 
-    case (_, irfh) =>  IRFHolders.toString(irfh)
-  }
 
   def isSingletonClauses(cnf:LLCNF):Boolean = (cnf.length == 1) || (cnf forall { c => c.length == 1 })
 }

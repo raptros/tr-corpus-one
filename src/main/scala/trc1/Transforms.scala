@@ -35,7 +35,7 @@ object RuleTypeChange {
     case ("forall", variables) => e all (variables map { Variable(_) })
   }
   
-  def conj(side:List[String]):fol.Expr = side map { parseQuick(_) } reduce { _ & _ }
+  def conj(side:List[String]):fol.Expr = side map { parseQuick _  } reduce { _ & _ }
 
   def mkFOLE(quantifiers:List[Quant], lhs:List[String], rhs:List[String]):fol.Expr = 
     (quantifiers foldRight (conj(lhs) --> conj(rhs))) { quantify(_, _) }
@@ -51,6 +51,10 @@ object RuleTypeChange {
 
   def folToIrfh(fr:FolRule):Option[IRFHolder] = fr match {
     case FolRule(fole, rules, weights, count) => mkIRF(fole) map { IRFHolder(_, rules, weights, count) }
+  }
+
+  def irfhFromTuple(v:(InferenceRuleFinal, (List[Int], List[Double], Int))):IRFHolder = v match {
+    case (irf, (ids, weights, count)) => IRFHolder(irf, ids, weights, count)
   }
 }
 
@@ -102,9 +106,7 @@ object GetFOL { //(val candcBasePath:String, val instanceCount:Int=1) {
   def apply(sentence:String):Option[fol.Expr] = {
     import Console.err
     val echo = "echo " + sentence
-    //external command runs
-    //i don't like doing this, but I think it'll be much faster.
-    ///val lb = ListBuffer.empty[FolExpression]
+    //external command run; captured by the (ugh) mutable s - an option containing the first expression found
     var s = none[fol.Expr]
     val onL:String => Unit = _ |> { BoxerFOLParser extractFol _ } foreach { f => s = s orElse some(f) }
     val pl = ProcessLogger(onL, e => ())
